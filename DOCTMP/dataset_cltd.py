@@ -15,7 +15,7 @@ from albumentations.pytorch import ToTensorV2
 import torchvision.transforms as transforms
 
 class TamperDatasetCLTD(Dataset):
-    def __init__(self, lmdb_path, record_path, qt_table_path, T=8192, is_train=True, max_readers=64):
+    def __init__(self, lmdb_path, record_path, qt_table_path, T=8192, is_train=True, fixed_quality=95, max_readers=64):
         self.env = lmdb.open(lmdb_path, max_readers=max_readers, readonly=True, lock=False, readahead=False, meminit=False)
         with self.env.begin(write=False) as txn:
             self.nSamples = int(txn.get('num-samples'.encode('utf-8')))
@@ -26,6 +26,7 @@ class TamperDatasetCLTD(Dataset):
         self.T = T
         self.step = 0
         self.is_train = is_train
+        self.fixed_quality = fixed_quality  # ← nouveau
 
         self.normalize = transforms.Compose([
             transforms.ToTensor(),
@@ -44,10 +45,9 @@ class TamperDatasetCLTD(Dataset):
             B1 = max(5, 100 - self.step / self.T)
             quality = int(random.uniform(B1, 100))
         else:
-            quality = 95  # fixed during val/test
+            quality = self.fixed_quality  # ← maintenant utilisé
 
         with self.env.begin(write=False) as txn:
-            # image importation
             img_key = f'image-{idx+1:09d}'
             imgbuf = txn.get(img_key.encode('utf-8'))
             if imgbuf is None:
@@ -58,7 +58,6 @@ class TamperDatasetCLTD(Dataset):
             buf.seek(0)
             im = Image.open(buf).convert('RGB')
 
-            # Open the mask
             lbl_key = f'label-{idx+1:09d}'
             lblbuf = txn.get(lbl_key.encode('utf-8'))
             if lblbuf is None:
@@ -68,23 +67,27 @@ class TamperDatasetCLTD(Dataset):
             mask = (mask != 0).astype(np.uint8)
             mask_tensor = self.totsr(image=mask.copy())['image'].long()
 
-        # Apply compression to grayscale version and dct calculation
+        # Apply compression to grayscale version and compute DCT
         with tempfile.NamedTemporaryFile(suffix=".jpg") as tmp:
             im_l = im.convert("L")
             im_l.save(tmp.name, format="JPEG", quality=quality)
             jpeg_gray = cv2.imread(tmp.name, cv2.IMREAD_GRAYSCALE).astype(np.float32) / 255.0
             dct = cv2.dct(jpeg_gray)
+            im_compressed_rgb = Image.open(tmp.name).convert("RGB")
 
-        # Q-table
+        # Get Q-table from final record (could be ignored if fixed quality is used)
         record = self.record[idx]
         q_used = record[-1] if isinstance(record, (list, tuple)) else 95
-        q_tensor = self.qtables.get(q_used, torch.zeros((64,), dtype=torch.long))
+        q_tensor = self.qtables.get(q_used, torch.zeros((64,), dtype=torch.long))  
+        
 
-        # return
+
+
         return {
-            'image': self.normalize(im),
+            'image': self.normalize(im_compressed_rgb),
+            'image_compressed': transforms.ToTensor()(im_compressed_rgb),
             'label': mask_tensor,
             'rgb': torch.from_numpy(np.clip(np.abs(dct), 0, 20)).float(),
             'q': q_tensor,
-            'i': quality
+            'i': q_used  # on peut aussi y mettre q_used si besoin
         }

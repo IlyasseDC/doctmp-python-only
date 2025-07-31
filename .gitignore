@@ -1,0 +1,96 @@
+# ignorer les fichiers lourds de poids
+*.pt
+*.pth
+*.pkl
+# ignorer tous les checkpoints, résultats, etc.
+checkpoints/
+eval_outputs_*
+Converted/
+# ignorer tout sauf le code
+__pycache__/
+venv/
+DocTamperV1-FCD/
+DocTamperV1-SCD/
+DocTamperV1-TestingSet/
+DocTamperV1-TrainingSet/
+images/
+results/
+results2/
+dtd_doctamper.pth
+dtd_sroie.pth
+swin_imagenet.pt
+vph_imagenet.pt
+__pycache__/
+Weights/
+pks/
+.ssh/
+.vscode-server/
+.cache/
+.config/
+.dotnet/
+.local/
+tampering_types/
+output graphs/
+checkpoints/
+Converted/
+src/
+# ⛔ Fichiers système / personnels
+.bash_history
+.bash_logout
+.bashrc
+.gitconfig
+.profile
+.wget-hsts
+examples.desktop
+
+# ✅ On garde seulement les fichiers de code Python (.py) et Git config
+
+# ⛔ Caches et fichiers temporaires Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.png
+*.csv
+*.log
+# ⛔ Poids et gros fichiers binaires
+*.pt
+*.pth
+*.pkl
+
+# ⛔ Dossiers de checkpoints, résultats, conversions, etc.
+checkpoints/
+Converted/
+output graphs/
+logs/
+Weights/
+results/
+results2/
+pks/
+
+# ⛔ Datasets lourds
+DocTamperV1-TrainingSet/
+DocTamperV1-TestingSet/
+DocTamperV1-SCD/
+DocTamperV1-FCD/
+tampering_types/
+
+#  Environnements Python et IDE
+.venv/
+venv/
+.vscode/
+.vscode-server/
+.cache/
+.config/
+.local/
+.dotnet/
+.ssh/
+
+#  Autres fichiers inutiles ou doublons
+DOCTMP/.gitignore copy
+DOCTMP/stg/
+
+vis_preds/
+vis_preds_train/    
+vis_preds_FCD/ 
+vis_preds_retrained/ 

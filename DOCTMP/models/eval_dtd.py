@@ -46,7 +46,7 @@ from dataset_cltd import TamperDatasetCLTD
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--data_root', type=str, default='./') 
-parser.add_argument('--pth', type=str, default='dtd.pth')
+parser.add_argument('--pth', type=str, default='checkpoints_new_12000_test/checkpoint-best.pth')
 parser.add_argument('--lmdb_name', type=str, default='DocTamperV1-FCD')
 parser.add_argument('--minq', type=int, default=75)
 args = parser.parse_args()
@@ -118,10 +118,10 @@ class TamperDataset(Dataset):
             }
 """
 # Paramètres cohérents
-lmdb_path = './DocTamperV1-SCD'
-record_path = './pks/DocTamperV1-TrainingSet_90.pk'
+lmdb_path = './DocTamperV1-TestingSet'
+record_path = './pks/DocTamperV1-TestingSet_90.pk'
 qt_path = './pks/qt_table.pk'
-T = 8192  
+T = 200
 
 # Charger le dataset complet
 full_dataset = TamperDatasetCLTD(lmdb_path, record_path, qt_path, T=T, is_train=True)
@@ -129,7 +129,7 @@ full_dataset = TamperDatasetCLTD(lmdb_path, record_path, qt_path, T=T, is_train=
 # Split identique
 train_indices = list(range(0, 1000))
 val_indices   = list(range(1000, 1250))
-heldout_indices = list(range(1300, 1999))
+heldout_indices = list(range(15000, 16000))
 
 # Subset test (ex: validation comme dans training)
 test_data = torch.utils.data.Subset(full_dataset, heldout_indices)
@@ -309,6 +309,7 @@ def eval_net_dtd(model, test_data, plot=False,device='cpu'):
 
 eval_net_dtd(model, test_data) 
 
+#eval_net_dtd(model, test_data) 
 
 
 """
@@ -502,3 +503,324 @@ with torch.no_grad():
     precisons = np.array(precisons).mean()
     recalls = np.array(recalls).mean()
     print('[val] iou:{} p:{} r:{} f:{}'.format(iu[1],precisons,recalls,(2*precisons*recalls/(precisons+recalls+1e-8))))"""
+"""
+from sklearn.metrics import roc_curve, auc, precision_recall_curve
+
+def eval_net_dtd_thresh(model, test_data, device='cuda', threshold=0.5, return_raw=True, vis_dir="vis_preds_CLTD"):
+    from torch.utils.data import DataLoader
+    from torch.autograd import Variable
+    import os
+
+    model.eval()
+    loader = DataLoader(test_data, batch_size=2, num_workers=4, shuffle=False)
+
+    iou = IOUMetric(2)
+    precisions, recalls = [], []
+    all_probs, all_targets = [], []
+
+    max_vis = 50
+    vis_count = 0
+    os.makedirs(vis_dir, exist_ok=True)
+
+    with torch.no_grad():
+        for batch_idx, batch in enumerate(tqdm(loader)):
+            data = batch['image'].to(device)
+            target = batch['label'].to(device)
+            dct_coef = batch['rgb'].long().to(device)
+            qs = batch['q'].unsqueeze(1).to(device)
+
+            pred = model(data, dct_coef, qs)
+            prob = torch.softmax(pred, dim=1)[:, 1, :, :]  # proba de la classe "tamper"
+            pred_mask = (prob > threshold).long()
+
+            targt = target.squeeze(1)
+            matched = (pred_mask * targt).sum((1, 2))
+            pred_sum = pred_mask.sum((1, 2))
+            target_sum = targt.sum((1, 2))
+
+            precisions.append((matched / (pred_sum + 1e-8)).mean().item())
+            recalls.append((matched / (target_sum + 1e-8)).mean().item())
+            iou.add_batch(pred_mask.cpu().numpy(), targt.cpu().numpy())
+
+            if return_raw:
+                all_probs.append(prob.cpu().numpy().flatten())
+                all_targets.append(targt.cpu().numpy().flatten())
+
+            # Visualisation des 50 premières images
+            for b in range(data.shape[0]):
+                if vis_count >= max_vis:
+                    break
+                img = data[b].cpu()
+                gt = target[b, 0].cpu() if target.dim() == 4 else target[b].cpu()
+                pd = pred_mask[b].cpu()
+                save_visualization(img, gt, pd, index=vis_count, output_dir=vis_dir)
+                vis_count += 1
+
+    acc, acc_cls, iu, mean_iu, fwavacc = iou.evaluate()
+    pre_mean = np.mean(precisions)
+    rec_mean = np.mean(recalls)
+    f1 = (2 * pre_mean * rec_mean) / (pre_mean + rec_mean + 1e-8)
+
+    print(f'[val] iou: {iu} | precision: {pre_mean:.4f} | recall: {rec_mean:.4f} | f1: {f1:.4f}')
+
+    if return_raw:
+        y_score = np.concatenate(all_probs)
+        y_true = np.concatenate(all_targets)
+        return iu, pre_mean, rec_mean, f1, y_true, y_score
+    else:
+        return iu, pre_mean, rec_mean, f1
+
+
+# Appel de la fonction sur un sous-ensemble de test
+iu, pre, rec, f1, y_true, y_score = eval_net_dtd_thresh(model, test_data, device='cuda', return_raw=True)
+
+# ROC
+fpr, tpr, _ = roc_curve(y_true, y_score)
+roc_auc = auc(fpr, tpr)
+
+plt.figure()
+plt.plot(fpr, tpr, label=f'ROC curve (AUC = {roc_auc:.2f})')
+plt.plot([0, 1], [0, 1], linestyle='--', color='gray')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('ROC Curve')
+plt.legend()
+plt.grid(True)
+plt.savefig("roc_curve_cltd.png")
+plt.show()
+
+# PR
+prec, recs, _ = precision_recall_curve(y_true, y_score)
+pr_auc = auc(recs, prec)
+
+plt.figure()
+plt.plot(recs, prec, label=f'PR curve (AUC = {pr_auc:.2f})')
+plt.xlabel('Recall')
+plt.ylabel('Precision')
+plt.title('Precision-Recall Curve')
+plt.legend()
+plt.grid(True)
+plt.savefig("pr_curve_cltd.png")
+plt.show()"""
+
+import os
+import torch
+import numpy as np
+import matplotlib.pyplot as plt
+from tqdm import tqdm
+from sklearn.metrics import roc_curve, auc, precision_recall_curve
+from torch.utils.data import Subset, DataLoader
+
+from models.dtd import seg_dtd
+from dataset_cltd import TamperDatasetCLTD
+
+
+
+def denormalize(tensor, mean=(0.485, 0.455, 0.406), std=(0.229, 0.224, 0.225)):
+    mean = torch.tensor(mean).view(3, 1, 1)
+    std = torch.tensor(std).view(3, 1, 1)
+    return tensor * std + mean
+
+
+def save_visualization(img, gt_mask, pred_mask, index, output_dir="vis_preds"):
+    img = denormalize(img.cpu()).numpy().transpose(1, 2, 0)
+    img = np.clip(img * 255, 0, 255).astype(np.uint8)
+    gt = gt_mask.cpu().numpy()
+    pred = pred_mask.cpu().numpy()
+
+    os.makedirs(output_dir, exist_ok=True)
+    plt.figure(figsize=(10, 4))
+    for i, (title, image) in enumerate(zip(["Image", "GT", "Pred"], [img, gt, pred])):
+        plt.subplot(1, 3, i + 1)
+        plt.imshow(image if i == 0 else image, cmap="gray")
+        plt.title(title)
+        plt.axis("off")
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, f"sample_{index}.png"))
+    plt.close()
+
+
+def eval_net_with_curves(model, dataset_name, dataset, save_dir, device='cuda', threshold=0.5):
+    loader = DataLoader(dataset, batch_size=2, num_workers=4, shuffle=False)
+    model.eval()
+
+    iou = IOUMetric(2)
+    precisions, recalls = [], []
+    all_probs, all_targets = [], []
+
+    vis_dir = os.path.join(save_dir, f"vis_preds_{dataset_name}")
+    os.makedirs(vis_dir, exist_ok=True)
+    vis_count, max_vis = 0, 10
+
+    with torch.no_grad():
+        for batch in tqdm(loader, desc=f"Evaluating {dataset_name}"):
+            data = batch['image'].to(device)
+            target = batch['label'].to(device)
+            dct_coef = batch['rgb'].long().to(device)
+            qs = batch['q'].unsqueeze(1).to(device)
+
+            pred = model(data, dct_coef, qs)
+            prob = torch.softmax(pred, dim=1)[:, 1, :, :]
+            pred_mask = (prob > threshold).long()
+            targt = target.squeeze(1)
+
+            matched = (pred_mask * targt).sum((1, 2))
+            pred_sum = pred_mask.sum((1, 2))
+            target_sum = targt.sum((1, 2))
+            precisions.append((matched / (pred_sum + 1e-8)).mean().item())
+            recalls.append((matched / (target_sum + 1e-8)).mean().item())
+            iou.add_batch(pred_mask.cpu().numpy(), targt.cpu().numpy())
+
+            all_probs.append(prob.cpu().numpy().flatten())
+            all_targets.append(targt.cpu().numpy().flatten())
+
+            for b in range(data.shape[0]):
+                if vis_count >= max_vis:
+                    break
+                save_visualization(data[b], targt[b], pred_mask[b], vis_count, vis_dir)
+                vis_count += 1
+
+    acc, acc_cls, iou_values, mean_iou, fwavacc = iou.evaluate()
+    pre_mean = np.mean(precisions)
+    rec_mean = np.mean(recalls)
+    f1 = (2 * pre_mean * rec_mean) / (pre_mean + rec_mean + 1e-8)
+
+    print(f"\n[{dataset_name}] IoU: {iou_values} | Precision: {pre_mean:.4f} | Recall: {rec_mean:.4f} | F1: {f1:.4f}")
+
+    # ROC + PR
+    y_score = np.concatenate(all_probs)
+    y_true = np.concatenate(all_targets)
+
+    fpr, tpr, _ = roc_curve(y_true, y_score)
+    roc_auc = auc(fpr, tpr)
+
+    plt.figure()
+    plt.plot(fpr, tpr, label=f'ROC curve (AUC = {roc_auc:.2f})')
+    plt.plot([0, 1], [0, 1], linestyle='--', color='gray')
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title(f'ROC Curve - {dataset_name}')
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_dir, f"roc_curve_{dataset_name}.png"))
+    plt.close()
+
+    prec, recs, _ = precision_recall_curve(y_true, y_score)
+    pr_auc = auc(recs, prec)
+
+    plt.figure()
+    plt.plot(recs, prec, label=f'PR curve (AUC = {pr_auc:.2f})')
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.title(f'Precision-Recall Curve - {dataset_name}')
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_dir, f"pr_curve_{dataset_name}.png"))
+    plt.close()
+
+
+# ============================== MAIN SCRIPT ==============================
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+model = seg_dtd("", 2).to(device)
+model = torch.nn.DataParallel(model)
+model.load_state_dict(torch.load("checkpoints_new_12000_test/checkpoint-best.pth", map_location=device)['state_dict'])
+
+datasets_info = {
+    "TrainingSet":   ("./DocTamperV1-TrainingSet", "./pks/DocTamperV1-TrainingSet_90.pk", True, range(15000, 16000)),
+    "TestingSet":   ("./DocTamperV1-TestingSet", "./pks/DocTamperV1-TestingSet_90.pk", False, range(1500, 16000)),
+    "FCD":           ("./DocTamperV1-FCD", "./pks/DocTamperV1-FCD_90.pk", False, range(500, 1500)),
+    "SCD":           ("./DocTamperV1-SCD", "./pks/DocTamperV1-SCD_90.pk", False, range(500, 500)),
+}
+
+qt_path = './pks/qt_table.pk'
+T = 5000
+save_dir = "results_eval_dtd_test2"
+os.makedirs(save_dir, exist_ok=True)
+import pandas as pd
+"""
+qualities = list(range(85, 101, 1))  # 85 à 100 inclus
+all_results = []
+
+for name, (lmdb_path, record_path, is_train, subset_range) in datasets_info.items():
+    print(f"\n=== Dataset : {name} ===")
+    for q in qualities:
+        print(f"[{name}] Évaluation à JPEG Quality = {q}")
+        
+        dataset_q = TamperDatasetCLTD(
+            lmdb_path, 
+            record_path, 
+            qt_path, 
+            T=T, 
+            is_train=False, 
+            fixed_quality=q  # qualité fixée ici
+        )
+        subset = Subset(dataset_q, list(subset_range))
+
+        # === Évaluation simple, sans visualisation ni courbes ROC/PR
+        loader = DataLoader(subset, batch_size=2, shuffle=False, num_workers=4)
+        model.eval()
+
+        iou = IOUMetric(2)
+        precisions, recalls = [], []
+
+        with torch.no_grad():
+            for batch in loader:
+                data = batch['image'].to(device)
+                target = batch['label'].to(device)
+                dct_coef = batch['rgb'].long().to(device)
+                qs = batch['q'].unsqueeze(1).to(device)
+
+                pred = model(data, dct_coef, qs)
+                prob = torch.softmax(pred, dim=1)[:, 1, :, :]
+                pred_mask = (prob > 0.5).long()
+                targt = target.squeeze(1)
+
+                matched = (pred_mask * targt).sum((1, 2))
+                pred_sum = pred_mask.sum((1, 2))
+                target_sum = targt.sum((1, 2))
+                precisions.append((matched / (pred_sum + 1e-8)).mean().item())
+                recalls.append((matched / (target_sum + 1e-8)).mean().item())
+                iou.add_batch(pred_mask.cpu().numpy(), targt.cpu().numpy())
+
+        acc, acc_cls, iou_values, mean_iou, fwavacc = iou.evaluate()
+        pre_mean = np.mean(precisions)
+        rec_mean = np.mean(recalls)
+        f1 = (2 * pre_mean * rec_mean) / (pre_mean + rec_mean + 1e-8)
+
+        # Ajout au tableau global
+        all_results.append({
+            "Dataset": name,
+            "JPEG Quality": q,
+            "IoU Class 1": iou_values[1],
+            "Precision": pre_mean,
+            "Recall": rec_mean,
+            "F1 Score": f1
+        })"""
+"""
+# ---- Création du DataFrame global
+df_all = pd.DataFrame(all_results)
+df_all.to_csv(os.path.join(save_dir, "all_metrics_vs_quality.csv"), index=False)
+
+# ---- Tracés
+metrics = ["IoU Class 1", "Precision", "Recall", "F1 Score"]
+for metric in metrics:
+    plt.figure(figsize=(10, 6))
+    for name in df_all["Dataset"].unique():
+        df_subset = df_all[df_all["Dataset"] == name]
+        plt.plot(df_subset["JPEG Quality"], df_subset[metric], label=name, marker='o')
+    plt.xlabel("JPEG Quality")
+    plt.ylabel(metric)
+    plt.title(f"{metric} vs JPEG Quality across datasets")
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_dir, f"{metric.lower().replace(' ', '_')}_vs_quality.png"))
+    plt.close()"""
+
+for name, (lmdb_path, record_path, is_train, subset_range) in datasets_info.items():
+    dataset = TamperDatasetCLTD(lmdb_path, record_path, qt_path, T=T, is_train=is_train)
+    subset = Subset(dataset, list(subset_range))
+    eval_net_dtd(model, subset)
