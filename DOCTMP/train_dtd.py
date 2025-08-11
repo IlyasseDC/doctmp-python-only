@@ -23,7 +23,7 @@ def train_dtd(param):
     lmdb_path = param['lmdb_path']
     record_path = param['record_path']
     qt_path = param['qt_path']
-    T = param.get('T', 8192)
+    T = param.get('T')
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     os.makedirs(save_ckpt_dir, exist_ok=True)
@@ -56,8 +56,8 @@ def train_dtd(param):
     full_dataset = TamperDatasetCLTD(lmdb_path, record_path, qt_path, T=T, is_train=True)
 
     # 2. Définir les indices
-    train_indices = list(range(0, 6000))
-    val_indices   = list(range(7000, 8000))
+    train_indices = list(range(0, 1000))
+    val_indices   = list(range(1000, 1500))
 
     # 3. Créer les sous-datasets
     train_set = torch.utils.data.Subset(full_dataset, train_indices)
@@ -65,8 +65,8 @@ def train_dtd(param):
     # heldout_set = torch.utils.data.Subset(full_dataset, heldout_indices)  # pour plus tard si besoin
 
     # 4. Dataloaders
-    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=8)
-    val_loader   = DataLoader(val_set, batch_size=batch_size, shuffle=False, num_workers=8)
+    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=False, num_workers=4)
+    val_loader   = DataLoader(val_set, batch_size=batch_size, shuffle=False, num_workers=2)
 
     best_iou = 0
     for epoch in range(epochs):
@@ -108,6 +108,12 @@ def train_dtd(param):
                 label = batch['label'].to(device, non_blocking=True)
                 dct = batch['rgb'].long().to(device, non_blocking=True)
                 qtb = batch['q'].long().unsqueeze(1).to(device, non_blocking=True)
+                # Qualité JPEG moyenne du batch
+                jpeg_qualities = batch['i']  
+                avg_quality = sum(jpeg_qualities) / len(jpeg_qualities)
+                print(jpeg_qualities)
+                logger.info(f"[Epoch {epoch+1}] Batch avg JPEG quality: {avg_quality:.2f}")
+
 
                 with autocast():
                     output = model(image, dct, qtb)
@@ -142,14 +148,14 @@ def train_dtd(param):
 
 if __name__ == "__main__":
     params = {
-        'epochs': 10,
+        'epochs': 20,
         'batch_size': 2,
         'save_ckpt_dir': './checkpoints',
         'save_log_dir': './logs',
-        'lmdb_path': './DocTamperV1-TestingSet',
-        'record_path': './pks/DocTamperV1-TestingSet_90.pk',
+        'lmdb_path': './DocTamperV1-FCD',
+        'record_path': './pks/DocTamperV1-FCD_75.pk',
         'qt_path': './pks/qt_table.pk',
-        'T': 7000,
+        'T': 40,
         'load_ckpt': './Weights/dtd_doctamper.pth'
     }
     train_dtd(params)

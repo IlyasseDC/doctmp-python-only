@@ -13,20 +13,20 @@ from torch.utils.data import Dataset
 from PIL import Image
 from albumentations.pytorch import ToTensorV2
 import torchvision.transforms as transforms
+import jpegio
 
 class TamperDatasetCLTD(Dataset):
-    def __init__(self, lmdb_path, record_path, qt_table_path, T=8192, is_train=True, fixed_quality=95, max_readers=64):
+    def __init__(self, lmdb_path, record_path, T=8192, is_train=True, fixed_quality=95, max_readers=64):
         self.env = lmdb.open(lmdb_path, max_readers=max_readers, readonly=True, lock=False, readahead=False, meminit=False)
         with self.env.begin(write=False) as txn:
             self.nSamples = int(txn.get('num-samples'.encode('utf-8')))
         self.max_nums = self.nSamples
 
         self.record = pickle.load(open(record_path, 'rb'))
-        self.qtables = pickle.load(open(qt_table_path, 'rb'))
         self.T = T
         self.step = 0
         self.is_train = is_train
-        self.fixed_quality = fixed_quality  # ← nouveau
+        self.fixed_quality = fixed_quality 
 
         self.normalize = transforms.Compose([
             transforms.ToTensor(),
@@ -45,7 +45,7 @@ class TamperDatasetCLTD(Dataset):
             B1 = max(5, 100 - self.step / self.T)
             quality = int(random.uniform(B1, 100))
         else:
-            quality = self.fixed_quality  # ← maintenant utilisé
+            quality = self.fixed_quality 
 
         with self.env.begin(write=False) as txn:
             img_key = f'image-{idx+1:09d}'
@@ -71,15 +71,14 @@ class TamperDatasetCLTD(Dataset):
         with tempfile.NamedTemporaryFile(suffix=".jpg") as tmp:
             im_l = im.convert("L")
             im_l.save(tmp.name, format="JPEG", quality=quality)
-            jpeg_gray = cv2.imread(tmp.name, cv2.IMREAD_GRAYSCALE).astype(np.float32) / 255.0
-            dct = cv2.dct(jpeg_gray)
+            jpg = jpegio.read(tmp.name)
+            dct = jpg.coef_arrays[0].astype(np.float32)
             im_compressed_rgb = Image.open(tmp.name).convert("RGB")
 
         # Get Q-table from final record (could be ignored if fixed quality is used)
-        record = self.record[idx]
-        q_used = record[-1] if isinstance(record, (list, tuple)) else 95
-        q_tensor = self.qtables.get(q_used, torch.zeros((64,), dtype=torch.long))  
-        
+        qtable_array = jpg.quant_tables[0]  # DCT quantization table (8x8)
+        q_tensor = torch.from_numpy(qtable_array.astype(np.long)).unsqueeze(0)  # (1, 8, 8)
+
 
 
 
@@ -89,5 +88,6 @@ class TamperDatasetCLTD(Dataset):
             'label': mask_tensor,
             'rgb': torch.from_numpy(np.clip(np.abs(dct), 0, 20)).float(),
             'q': q_tensor,
-            'i': q_used  # on peut aussi y mettre q_used si besoin
+            'i': quality
+ 
         }

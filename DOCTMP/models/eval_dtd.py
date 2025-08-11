@@ -726,7 +726,7 @@ def eval_net_with_curves(model, dataset_name, dataset, save_dir, device='cuda', 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model = seg_dtd("", 2).to(device)
 model = torch.nn.DataParallel(model)
-model.load_state_dict(torch.load("checkpoints_new_12000_test/checkpoint-best.pth", map_location=device)['state_dict'])
+model.load_state_dict(torch.load("checkpoints/checkpoint-best.pth", map_location=device)['state_dict'])
 
 datasets_info = {
     "TrainingSet":   ("./DocTamperV1-TrainingSet", "./pks/DocTamperV1-TrainingSet_90.pk", True, range(15000, 16000)),
@@ -736,8 +736,8 @@ datasets_info = {
 }
 
 qt_path = './pks/qt_table.pk'
-T = 5000
-save_dir = "results_eval_dtd_test2"
+T = 600
+save_dir = "results_eval_dtd_train2"
 os.makedirs(save_dir, exist_ok=True)
 import pandas as pd
 """
