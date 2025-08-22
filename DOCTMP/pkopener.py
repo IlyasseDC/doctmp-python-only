@@ -8,6 +8,7 @@ record_path = './pks/DocTamperV1-TestingSet_75.pk'
 # Lire les quantization tables
 with open(qt_path, 'rb') as f:
     qt_table = pickle.load(f)
+print(len(qt_table[90]))
 
 print("Quantization Table (qt_table.pk):")
 """for q_level, qt_tensor in qt_table.items():
