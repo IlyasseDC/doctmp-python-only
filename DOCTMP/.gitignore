@@ -1,0 +1,53 @@
+# Ignore tout par défaut
+# --- Ignorer les fichiers lourds, mais pas les dossiers ---
+# Checkpoints / modèles
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.h5
+*.pb
+
+# Données brutes
+*.jpg
+*.jpeg
+*.png
+*.tif
+*.bmp
+*.gif
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.zip
+*.tar
+*.gz
+*.7z
+*.npy
+*.npz
+*.mat
+*.pkl
+*.pickle
+
+# Bases LMDB
+*.lmdb
+*.mdb
+lock.mdb
+
+# Cache et temporaires
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+*.DS_Store
+*.ipynb_checkpoints/
+
+
+# --- Exceptions : garder uniquement les fichiers Python ---
+!*.py
+
+# --- Mais ignorer l'environnement virtuel ---
+venv/
+.venv/
+env/
