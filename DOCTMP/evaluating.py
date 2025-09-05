@@ -1,3 +1,19 @@
+# eval_dtd_images.py
+import os
+import argparse
+import numpy as np
+from tqdm import tqdm
+from PIL import Image
+
+import torch
+from torch.utils.data import DataLoader
+from torch.cuda.amp import autocast
+
+from models.dtd import seg_dtd
+from models.losses import LovaszLoss, SoftCrossEntropyLoss
+from utils import get_logger
+from metrics import IOUMetric
+
 # train_dtd_images.py
 import os
 import argparse
@@ -329,16 +345,127 @@ def train_dtd_images(param):
                         'optimizer': optimizer.state_dict()},
                        os.path.join(save_ckpt_dir, 'checkpoint-best.pth'))
             logger.info(f"Best model saved at epoch {epoch+1} with IoU class 1 = {best_iou:.4f}")
+def evaluate(params):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    os.makedirs(params['save_log_dir'], exist_ok=True)
+    logger = get_logger(os.path.join(params['save_log_dir'], "eval_dtd_img.log"))
+
+    # -------------------------
+    # Chargement du modèle
+    # -------------------------
+    logger.info("Loading model seg_dtd...")
+    model = seg_dtd("", n_class=2).to(device)
+
+    assert os.path.exists(params['load_ckpt']), f"Checkpoint {params['load_ckpt']} not found"
+    checkpoint = torch.load(params['load_ckpt'], map_location=device)
+    model.load_state_dict(checkpoint['state_dict'], strict=False)
+    logger.info(f"Checkpoint {params['load_ckpt']} loaded (epoch={checkpoint.get('epoch','?')}).")
+
+    model.eval()
+
+    # -------------------------
+    # Dataset test
+    # -------------------------
+    logger.info("Preparing test dataset...")
+    val_dataset = TamperDatasetImages(
+        os.path.join(params['data_root'], "test", "Images"),
+        os.path.join(params['data_root'], "test", "Labels"),
+        quality=params.get('quality', 100)
+    )
+
+    val_loader = DataLoader(
+        val_dataset, batch_size=1, shuffle=False,
+        num_workers=2, collate_fn=patch_collate
+    )
+
+    ce_loss = SoftCrossEntropyLoss(smooth_factor=0.1)
+    lovasz_loss = LovaszLoss(mode="multiclass")
+
+    iou_metric = IOUMetric(2)
+    precisions, recalls = [], []
+    total_loss = 0.0
+
+    # -------------------------
+    # Préparation dossier de sauvegarde
+    # -------------------------
+    save_vis_dir = os.path.join(params['save_log_dir'], "outputs")
+    os.makedirs(save_vis_dir, exist_ok=True)
+
+    save_count = 0
+
+    # -------------------------
+    # Boucle d'évaluation
+    # -------------------------
+    with torch.no_grad():
+        for batch_idx, batch in enumerate(tqdm(val_loader, desc="Evaluating")):
+            image = batch['image'].to(device)
+            label = batch['label'].to(device)
+            dct   = batch['rgb'].long().to(device)
+            qtb   = batch['q'].long().to(device)
+
+            with autocast():
+                output = model(image, dct, qtb)
+                loss = 5 * ce_loss(output, label) + lovasz_loss(output, label)
+
+            total_loss += loss.item()
+            pred = output.argmax(1)
+            targt = label.squeeze(1)
+
+            # précision / rappel par patch
+            matched = (pred * targt).sum((1, 2))
+            pred_sum = pred.sum((1, 2))
+            target_sum = targt.sum((1, 2))
+            precisions.append((matched / (pred_sum + 1e-8)).mean().item())
+            recalls.append((matched / (target_sum + 1e-8)).mean().item())
+
+            # IoU global
+            iou_metric.add_batch(pred.cpu().numpy(), label.cpu().numpy())
+
+            # -------------------------
+            # Sauvegarde des 100 premières sorties
+            # -------------------------
+            if save_count < 100:
+                # On prend seulement le premier patch du batch (car batch=1)
+                img_np = (image[0].cpu().permute(1, 2, 0).numpy() * 255).astype(np.uint8)
+                lbl_np = targt[0].cpu().numpy().astype(np.uint8) * 255
+                pred_np = pred[0].cpu().numpy().astype(np.uint8) * 255
+
+                # Sauvegarde images
+                Image.fromarray(img_np).save(os.path.join(save_vis_dir, f"img_{save_count:03d}.png"))
+                Image.fromarray(lbl_np).save(os.path.join(save_vis_dir, f"gt_{save_count:03d}.png"))
+                Image.fromarray(pred_np).save(os.path.join(save_vis_dir, f"pred_{save_count:03d}.png"))
+
+                save_count += 1
+
+    acc, acc_cls, iou_vals, mean_iou, fwavacc = iou_metric.evaluate()
+    precision = sum(precisions) / len(precisions)
+    recall = sum(recalls) / len(recalls)
+    f1 = 2 * precision * recall / (precision + recall + 1e-8)
+
+    logger.info("=== Evaluation Results ===")
+    logger.info(f"Loss: {total_loss/len(val_loader):.4f}")
+    logger.info(f"IoU per class: {iou_vals}")
+    logger.info(f"Mean IoU: {mean_iou:.4f}")
+    logger.info(f"Precision: {precision:.4f}, Recall: {recall:.4f}, F1: {f1:.4f}")
+    logger.info("==========================")
+
+    return {
+        "loss": total_loss/len(val_loader),
+        "iou_class": iou_vals,
+        "mean_iou": mean_iou,
+        "precision": precision,
+        "recall": recall,
+        "f1": f1
+    }
+
 
 
 if __name__ == "__main__":
     params = {
-        'epochs': 30,
-        'batch_size': 4,
-        'save_ckpt_dir': './checkpointsfinetune',
-        'save_log_dir': './logs_img',
+        'save_log_dir': './logs_eval',
         'data_root': './FCDSCD_exported',
         'quality': 100,
-        'load_ckpt': './Weights/dtd_doctamper.pth'
+        'load_ckpt': './checkpointsfinetune/checkpoint-best.pth'
     }
-    train_dtd_images(params)
+    results = evaluate(params)
+    print(results)

@@ -147,8 +147,75 @@ def merge_datasets(datasets_root, output_dir, n_per_dataset=500, seed=42):
     print(f"[DONE] Total {counter} paires fusionnées dans {output_dir}")
 
 
-# Exemple d’utilisation
-datasets_root = "/home/ilyassechaouki/DOCTMP/Internal dataset"
-output_dir = "/home/ilyassechaouki/DOCTMP/Internal_TrainingSet_"
+import lmdb
+import six
+import os
+import cv2
+import numpy as np
+from PIL import Image
 
-merge_datasets(datasets_root, output_dir, n_per_dataset=2000, seed=42)
+def export_range_from_lmdb(lmdb_path, img_out_dir, lbl_out_dir, start, end, counter=0):
+    os.makedirs(img_out_dir, exist_ok=True)
+    os.makedirs(lbl_out_dir, exist_ok=True)
+
+    env = lmdb.open(lmdb_path, readonly=True, lock=False, readahead=False, meminit=False)
+    with env.begin(write=False) as txn:
+        n_samples = int(txn.get('num-samples'.encode('utf-8')).decode())
+        print(f"[INFO] {lmdb_path}: {n_samples} échantillons disponibles")
+
+        for idx in range(start, end):
+            if idx >= n_samples:
+                print(f"[WARN] Index {idx} hors limite ({n_samples}), stop.")
+                break
+
+            # --- image ---
+            img_key = f'image-{idx:09d}'.encode('utf-8')
+            imgbuf = txn.get(img_key)
+            if imgbuf is None:
+                print(f"[WARN] Image manquante à l'index {idx}")
+                continue
+            buf = six.BytesIO()
+            buf.write(imgbuf)
+            buf.seek(0)
+            im = Image.open(buf).convert("RGB")
+            im.save(os.path.join(img_out_dir, f"{counter}.jpg"))
+
+            # --- label ---
+            lbl_key = f'label-{idx:09d}'.encode('utf-8')
+            lblbuf = txn.get(lbl_key)
+            if lblbuf is None:
+                print(f"[WARN] Label manquant à l'index {idx}")
+                continue
+            mask = cv2.imdecode(np.frombuffer(lblbuf, dtype=np.uint8), 0)
+            cv2.imwrite(os.path.join(lbl_out_dir, f"{counter}.png"), mask)
+
+            counter += 1
+
+    env.close()
+    return counter
+
+def export_fcd_scd(fcd_lmdb, scd_lmdb, output_root):
+    # dossiers de sortie
+    train_img = os.path.join(output_root, "train", "Images")
+    train_lbl = os.path.join(output_root, "train", "Labels")
+    test_img  = os.path.join(output_root, "test", "Images")
+    test_lbl  = os.path.join(output_root, "test", "Labels")
+
+    # === Export TRAIN ===
+    counter = 0
+    counter = export_range_from_lmdb(fcd_lmdb, train_img, train_lbl, 0, 1000, counter)
+    counter = export_range_from_lmdb(scd_lmdb, train_img, train_lbl, 0, 2000, counter)
+    print(f"[OK] Train exporté : {counter} paires")
+
+    # === Export TEST ===
+    counter = 0
+    counter = export_range_from_lmdb(fcd_lmdb, test_img, test_lbl, 1000, 1500, counter)
+    counter = export_range_from_lmdb(scd_lmdb, test_img, test_lbl, 2000, 2500, counter)
+    print(f"[OK] Test exporté : {counter} paires")
+
+if __name__ == "__main__":
+    fcd_lmdb = "/home/ilyassechaouki/DOCTMP/DocTamperV1-FCD"
+    scd_lmdb = "/home/ilyassechaouki/DOCTMP/DocTamperV1-SCD"
+    output_root = "/home/ilyassechaouki/DOCTMP/FCDSCD_exported"
+
+    export_fcd_scd(fcd_lmdb, scd_lmdb, output_root)

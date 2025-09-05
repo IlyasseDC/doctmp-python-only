@@ -1,0 +1,29 @@
+// Pipeline entraînement DTD
+digraph {
+	A [label="Dataset Images + Labels
+(.jpg / .png)"]
+	B [label="Découpage en patchs (256x256)"]
+	C [label="Extraction JPEG features
+(DCT + Q-tables)"]
+	D [label="Entrée modèle seg_dtd
+(image + dct + q)"]
+	E [label="Prédiction segmentation
+(probabilités par pixel)"]
+	F [label="SoftCrossEntropyLoss
++ LovaszLoss"]
+	G [label="Optimisation (AdamW + AMP)
+Scheduler CosineAnnealing"]
+	H [label="Prédictions binaires (argmax)"]
+	I [label="Métriques : IoU, Precision, Recall, F1"]
+	J [label="Sauvegarde checkpoints
+(latest & best)"]
+	A -> B
+	B -> C
+	C -> D
+	D -> E
+	E -> F
+	F -> G
+	E -> H
+	H -> I
+	I -> J
+}
