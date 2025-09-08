@@ -127,7 +127,7 @@ def main():
     ap.add_argument("--labels_dir", required=True, help="Dossier des masques PNG (ex: .../Labels)")
     ap.add_argument("--lmdb_out",   required=True, help="Dossier de sortie LMDB (ex: ./DocTamperV1-FCD)")
     ap.add_argument("--pks_name",   default=None, help="Nom logique utilisé par eval (lmdb_name). Défaut: basename(lmdb_out)")
-    ap.add_argument("--q",          type=int, default=95, help="Qualité 'record' utilisée dans pks (ex: 75/85/95)")
+    ap.add_argument("--q",          type=int, default=100, help="Qualité 'record' utilisée dans pks (ex: 75/85/95)")
     args = ap.parse_args()
 
     pks_name = args.pks_name or Path(args.lmdb_out).name

@@ -203,14 +203,14 @@ def export_fcd_scd(fcd_lmdb, scd_lmdb, output_root):
 
     # === Export TRAIN ===
     counter = 0
-    counter = export_range_from_lmdb(fcd_lmdb, train_img, train_lbl, 0, 1000, counter)
-    counter = export_range_from_lmdb(scd_lmdb, train_img, train_lbl, 0, 2000, counter)
+    counter = export_range_from_lmdb(fcd_lmdb, train_img, train_lbl, 0, 1500, counter)#1000
+    counter = export_range_from_lmdb(scd_lmdb, train_img, train_lbl, 0, 9000, counter)#2000
     print(f"[OK] Train exporté : {counter} paires")
 
     # === Export TEST ===
     counter = 0
-    counter = export_range_from_lmdb(fcd_lmdb, test_img, test_lbl, 1000, 1500, counter)
-    counter = export_range_from_lmdb(scd_lmdb, test_img, test_lbl, 2000, 2500, counter)
+    counter = export_range_from_lmdb(fcd_lmdb, test_img, test_lbl, 1500, 1990, counter)
+    counter = export_range_from_lmdb(scd_lmdb, test_img, test_lbl, 9000, 10500, counter)
     print(f"[OK] Test exporté : {counter} paires")
 
 if __name__ == "__main__":

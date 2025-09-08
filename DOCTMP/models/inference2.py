@@ -1,13 +1,15 @@
-# infer_dtd_on_images.py
-import argparse
-from pathlib import Path
-import numpy as np
-from PIL import Image
+import os
+import cv2
 import torch
-from torch.utils.data import Dataset, DataLoader
-import torchvision
 import jpegio
+import numpy as np
 from tqdm import tqdm
+from torch.autograd import Variable
+from torch.utils.data import Dataset, DataLoader, Subset
+from albumentations.pytorch import ToTensorV2
+import torchvision
+from PIL import Image
+import argparse
 import os
 import cv2
 import lmdb
@@ -42,287 +44,108 @@ import tempfile
 from functools import partial
 import torch.nn.functional as F
 from timm.models.layers import trunc_normal_, DropPath
-
-
-
-class TamperDataset(Dataset):
-    def __init__(self, roots, mode, minq=95, qtb=90, max_readers=64):
-        self.envs = lmdb.open(roots,max_readers=max_readers,readonly=True,lock=False,readahead=False,meminit=False)
-        with self.envs.begin(write=False) as txn:
-            self.nSamples = int(txn.get('num-samples'.encode('utf-8')))
-        self.max_nums=self.nSamples
-        self.minq = minq
-        self.mode = mode
-        with open('pks/qt_table.pk','rb') as fpk:
-            pks = pickle.load(fpk)
-        self.pks = {}
-        for k,v in pks.items():
-            self.pks[k] = torch.LongTensor(v)
-        with open('pks/'+roots+'_%d.pk'%minq,'rb') as f:
-            self.record = pickle.load(f)
-        self.hflip = torchvision.transforms.RandomHorizontalFlip(p=1.0)
-        self.vflip = torchvision.transforms.RandomVerticalFlip(p=1.0)
-        self.totsr = ToTensorV2()
-        self.toctsr =torchvision.transforms.Compose([torchvision.transforms.ToTensor(),torchvision.transforms.Normalize(mean=(0.485, 0.455, 0.406), std=(0.229, 0.224, 0.225))])
-
-    def __len__(self):
-        return self.max_nums
-
-    def __getitem__(self, index):
-        with self.envs.begin(write=False) as txn:
-            img_key = 'image-%09d' % index
-            imgbuf = txn.get(img_key.encode('utf-8'))
-            buf = six.BytesIO()
-            buf.write(imgbuf)
-            buf.seek(0)
-            im = Image.open(buf)
-            lbl_key = 'label-%09d' % index
-            lblbuf = txn.get(lbl_key.encode('utf-8'))
-            mask = (cv2.imdecode(np.frombuffer(lblbuf,dtype=np.uint8),0)!=0).astype(np.uint8)
-            H,W = mask.shape
-            record = self.record[index]
-            choicei = len(record)-1
-            q = int(record[-1])
-            use_qtb = self.pks[q]
-            if choicei>1:
-                q2 = int(record[-3])
-                use_qtb2 = self.pks[q2]
-            if choicei>0:
-                q1 = int(record[-2])
-                use_qtb1 = self.pks[q1]
-            mask = self.totsr(image=mask.copy())['image']
-            with tempfile.NamedTemporaryFile(delete=True) as tmp:
-                im = im.convert("L")
-                if choicei>1:
-                    im.save(tmp,"JPEG",quality=q2)
-                    im = Image.open(tmp)
-                if choicei>0:
-                    im.save(tmp,"JPEG",quality=q1)
-                    im = Image.open(tmp)
-                im.save(tmp,"JPEG",quality=q)
-                jpg = jpegio.read(tmp.name)
-                dct = jpg.coef_arrays[0].copy()
-                im = im.convert('RGB')
-            return {
-                'image': self.toctsr(im),
-                'label': mask.long(),
-                'rgb': np.clip(np.abs(dct),0,20),
-                'q':use_qtb,
-                'i':q
-            }
-
-# -------- Dataset images --------
-class ImageFolderDTD(Dataset):
-    def __init__(self, root, exts=(".jpg", ".jpeg"), quality=100):
-        self.root = Path(root)
-        self.files = [p for p in self.root.rglob("*") if p.suffix.lower() in exts]
-
-        self.quality = quality
-        self.hflip = torchvision.transforms.RandomHorizontalFlip(p=1.0)
-        self.vflip = torchvision.transforms.RandomVerticalFlip(p=1.0)
-        self.totsr = ToTensorV2()
-        self.toctsr =torchvision.transforms.Compose([torchvision.transforms.ToTensor(),torchvision.transforms.Normalize(mean=(0.485, 0.455, 0.406), std=(0.229, 0.224, 0.225))
-        ])
-
-    def __len__(self):
-        return len(self.files)
-
-    def __getitem__(self, idx):
-        path = self.files[idx]
-
-        # Décodage PIL (déterministe à version lib fixée)
-        im = Image.open(path).convert("RGB").resize((512, 512), Image.LANCZOS)
-        orig_w, orig_h = im.size  # ici = (512,512)
-
-        # DCT/Qtables du JPEG source (sans réencodage)
-        jpg = jpegio.read(str(path))
-        dct = jpg.coef_arrays[0].copy()
-        q_table = torch.as_tensor(jpg.quant_tables[0], dtype=torch.long)
-        print(jpg)
-
-        return {
-            "image": self.toctsr(im),
-            "rgb": np.clip(np.abs(dct), 0, 20),
-            "q": q_table,
-            "path": str(path),
-            "orig_w": 512,
-            "orig_h": 512,
-            "padding": torch.zeros(4, dtype=torch.int)
-        }
-
+from models.dtd import seg_dtd  # ton modèle DTD
+from pathlib import Path
 from PIL import ImageOps
+import tempfile
 
-def pad_to_multiple(img, mult=32):
-    w, h = img.size
-    pad_w = (mult - w % mult) % mult
-    pad_h = (mult - h % mult) % mult
-    padding = (0, 0, pad_w, pad_h)  # gauche, haut, droite, bas
-    return ImageOps.expand(img, padding), padding
 
-from PIL import Image
-import numpy as np
-from PIL import Image
+# --------------------
+# Dataset JPEG
+# --------------------
+import os
 import cv2
-import matplotlib.pyplot as plt
-
-import numpy as np
-from PIL import Image
-import cv2
-import random
-import numpy as np
 import torch
-
-import random
+import jpegio
 import numpy as np
-import torch
-
-def set_seed(seed=42):
-    random.seed(seed)
-    np.random.seed(seed)
-
-set_seed(44)
-
-
-def overlay_heatmap_with_legend_fixed(
-    image_rgb: Image.Image,
-    prob_map: np.ndarray,   # float in [0,1]
-    alpha: float = 0.5,
-    cmap: int = cv2.COLORMAP_JET,
-    legend_width: int = 80
-) -> Image.Image:
-    # 1) Clamp and scale to [0,255]
-    prob_map = np.clip(prob_map, 0.0, 1.0).astype(np.float32)
-    mask_norm = np.rint(prob_map * 255.0).astype(np.uint8)
-
-    # 2) Colormap
-    heatmap_bgr = cv2.applyColorMap(mask_norm, cmap)
-    heatmap_rgb = cv2.cvtColor(heatmap_bgr, cv2.COLOR_BGR2RGB)
-
-    # 3) Blend with original
-    image_np = np.asarray(image_rgb, dtype=np.uint8)
-    if heatmap_rgb.shape[:2] != image_np.shape[:2]:
-        heatmap_rgb = cv2.resize(
-            heatmap_rgb, (image_np.shape[1], image_np.shape[0]),
-            interpolation=cv2.INTER_LINEAR
-        )
-    blended = cv2.addWeighted(image_np, 1 - alpha, heatmap_rgb, alpha, 0)
-
-    # 4) Build readable legend (top=1.0 -> bottom=0.0)
-    h = image_np.shape[0]
-    legend_vals = np.linspace(255, 0, h, dtype=np.uint8).reshape(h, 1)
-    legend_color = cv2.applyColorMap(legend_vals, cmap)
-    legend_color = cv2.cvtColor(legend_color, cv2.COLOR_BGR2RGB)
-    legend_color = np.repeat(legend_color, legend_width, axis=1)
-
-    # 5) Add ticks
-    legend_with_text = legend_color.copy()
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    n_ticks = 6
-    for i, val in enumerate(np.linspace(1.0, 0.0, n_ticks)):
-        y = int(i * (h - 1) / (n_ticks - 1))
-        cv2.putText(legend_with_text, f"{val:.2f}", (8, max(12, y)),
-                    font, 0.45, (255, 255, 255), 1, cv2.LINE_AA)
-    cv2.putText(legend_with_text, "Proba", (8, 16),
-                font, 0.55, (255, 255, 255), 1, cv2.LINE_AA)
-
-    # 6) Concatenate and return
-    final_image = np.hstack((blended, legend_with_text))
-    return Image.fromarray(final_image)
+from tqdm import tqdm
+from torch.autograd import Variable
+from torch.utils.data import Dataset, DataLoader, Subset
+import torchvision
+from PIL import Image, ImageOps
+import argparse
+import tempfile
+from pathlib import Path
+from models.dtd import seg_dtd  # ton modèle DTD
+from metrics import IOUMetric
+from finetune_dtd import TamperDatasetImages, patch_collate
 
 
-def run_inference(pth, img_root, out_dir, batch_size=1, num_workers=0, device="cuda"):
-    img_root_path = Path(img_root)
+def evaluate(params):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    ds = ImageFolderDTD(img_root_path)
-    dl = DataLoader(
-        ds, batch_size=batch_size, num_workers=0,
-        shuffle=False, pin_memory=True,
-        worker_init_fn=lambda worker_id: np.random.seed(42 + worker_id)
-    )
-
-    dev = torch.device(device if torch.cuda.is_available() else "cpu")
-    model = seg_dtd('', 2).to(dev)
-    if dev.type == "cuda" and torch.cuda.device_count() > 1:
-        model = torch.nn.DataParallel(model)
-    ckpt = torch.load(pth, map_location="cpu")
-
+    # --- Charger modèle ---
+    model = seg_dtd("", n_class=2).to(device)
+    ckpt = torch.load(params['load_ckpt'], map_location=device)
     model.load_state_dict(ckpt['state_dict'], strict=False)
     model.eval()
 
-    out_dir = Path(out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    # --- Dataset & DataLoader ---
+    val_dataset = TamperDatasetImages(
+        os.path.join(params['data_root'], "Images"),
+        os.path.join(params['data_root'], "Labels"),
+        quality=params.get("quality", 100)
+    )
 
-    for batch in tqdm(dl, total=len(dl)):
-        imgs = batch["image"].to(dev, non_blocking=True)                 # (B,3,H,W)
-        dct  = batch["rgb"].to(dev, non_blocking=True)                   # (B,H/8,W/8)
-        qs   = batch["q"].unsqueeze(1).to(dev, dtype=torch.long)         # (B,1,8,8)
+    val_loader = DataLoader(
+        val_dataset, batch_size=1, shuffle=False,
+        num_workers=2, collate_fn=patch_collate
+    )
 
-        logits = model(imgs, dct, qs)                                    # (B,2,H,W)
-        pred_cls = logits.argmax(dim=1)                                   # (B,H,W) long, {0,1}
+    ce_loss = SoftCrossEntropyLoss(smooth_factor=0.1)
+    lovasz_loss = LovaszLoss(mode="multiclass")
 
-        # quick distribution check
-        total = pred_cls.numel()
-        ones = (pred_cls == 1).sum().item()
-        print(f"argmax stats - class1 ratio: {ones/total:.4f} ({ones}/{total})")
+    # --- Métriques globales ---
+    iou = IOUMetric(2)
+    precisions, recalls = [], []
 
-        B = pred_cls.shape[0]
-        for i in range(B):
-            src_path = Path(batch["path"][i])
+    with torch.no_grad():
+        for batch in tqdm(val_loader, desc="Evaluating"):
+            image = batch['image'].to(device)
+            label = batch['label'].to(device)
+            dct   = batch['rgb'].long().to(device)
+            qtb   = batch['q'].long().to(device)
 
-            # output folder mirrors input structure
-            try:
-                rel = src_path.relative_to(img_root_path)
-                save_dir = out_dir / rel.parent
-            except ValueError:
-                save_dir = out_dir
-            save_dir.mkdir(parents=True, exist_ok=True)
+            with autocast():
+                output = model(image, dct, qtb)
+                loss = 5 * ce_loss(output, label) + lovasz_loss(output, label)
 
-            ow = int(batch["orig_w"][i].item() if hasattr(batch["orig_w"][i], "item") else batch["orig_w"][i])
-            oh = int(batch["orig_h"][i].item() if hasattr(batch["orig_h"][i], "item") else batch["orig_h"][i])
+            pred = output.argmax(1)
+            targt = label.squeeze(1)
 
-            # crop padding on tensor
-            pad_left, pad_top, pad_right, pad_bottom = batch["padding"][i]
-            pad_left   = int(pad_left)
-            pad_top    = int(pad_top)
-            pad_right  = int(pad_right)
-            pad_bottom = int(pad_bottom)
+            matched = (pred * targt).sum((1, 2))
+            pred_sum = pred.sum((1, 2))
+            target_sum = targt.sum((1, 2))
 
-            cls_t = pred_cls[i].unsqueeze(0).float()  # (1,H,W) float for interpolate
-            H, W = cls_t.shape[-2], cls_t.shape[-1]
-            if pad_left or pad_top or pad_right or pad_bottom:
-                cls_t = cls_t[:, pad_top: H - pad_bottom, pad_left: W - pad_right]
+            precisions.append((matched / (pred_sum + 1e-8)).mean().item())
+            recalls.append((matched / (target_sum + 1e-8)).mean().item())
 
-            # resize to original with nearest (keeps labels)
-            cls_resized = torch.nn.functional.interpolate(
-                cls_t.unsqueeze(0), size=(oh, ow), mode="nearest"
-            ).squeeze(0).squeeze(0).to(torch.uint8)  # (oh,ow) uint8 {0,1}
+            iou.add_batch(pred.cpu().numpy(), label.cpu().numpy())
 
-            # save raw binary mask (0/255)
-            mask_bin = (cls_resized.cpu().numpy() * 255).astype(np.uint8)
-            out_mask = save_dir / f"{src_path.stem}_argmax.png"
-            Image.fromarray(mask_bin).save(out_mask)
+    # --- Résultats ---
+    acc, acc_cls, iou_vals, mean_iou, fwavacc = iou.evaluate()
+    precision = sum(precisions) / len(precisions) if precisions else 0.0
+    recall = sum(recalls) / len(recalls) if recalls else 0.0
+    f1 = 2 * precision * recall / (precision + recall + 1e-8) if (precision+recall)>0 else 0.0
 
-            # optional: simple overlay of contours on original image
-            orig_img = np.array(Image.open(src_path).convert("RGB"))
-            contours, _ = cv2.findContours(mask_bin, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            over_img = orig_img.copy()
-            cv2.drawContours(over_img, contours, -1, (255, 0, 0), 2)
-            out_overlay = save_dir / f"{src_path.stem}_argmax_overlay.png"
-            Image.fromarray(over_img).save(out_overlay)
-
-    print(f"Terminé. Masques argmax et overlays enregistrés dans : {out_dir}")
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--img_root", type=str, required=True, help="Dossier des JPEG (racine)")
-    ap.add_argument("--pth", type=str, required=True, help="checkpoint .pth de seg_dtd")
-    ap.add_argument("--out", type=str, default="predictions_dtd", help="Dossier de sortie")
-    ap.add_argument("--bs", type=int, default=4)
-    ap.add_argument("--workers", type=int, default=4)
-    args = ap.parse_args()
-
-    run_inference(args.pth, args.img_root, args.out,
-                  batch_size=args.bs, num_workers=args.workers)
+    print("=== Résultats évaluation (patch-level, identique à train) ===")
+    print(f"IoU classes   : {iou_vals}")
+    print(f"Mean IoU      : {mean_iou:.4f}")
+    print(f"F1-score moy. : {f1:.4f}")
+    print(f"Précision moy.: {precision:.4f}")
+    print(f"Rappel moy.   : {recall:.4f}")
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--data_root', type=str, required=True, help='Dossier contenant Images/ et Labels/')
+    parser.add_argument('--pth', type=str, required=True, help='Checkpoint .pth du modèle seg_dtd')
+    parser.add_argument('--quality', type=int, default=100, help='Qualité JPEG pour recompression')
+    args = parser.parse_args()
+
+    params = {
+        'data_root': args.data_root,
+        'load_ckpt': args.pth,
+        'quality': args.quality
+    }
+    evaluate(params)

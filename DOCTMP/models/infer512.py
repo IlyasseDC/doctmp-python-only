@@ -163,7 +163,7 @@ class TamperDatasetJPEG(Dataset):
         if pad_w8 > 0 or pad_h8 > 0:
             im = ImageOps.expand(im, (0, 0, pad_w8, pad_h8), fill=(0, 0, 0))
             with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
-                im.save(tmp.name, "JPEG", quality=90)
+                im.save(tmp.name, "JPEG", quality=100)
                 jpg = jpegio.read(tmp.name)
         else:
             jpg = jpegio.read(str(img_path))

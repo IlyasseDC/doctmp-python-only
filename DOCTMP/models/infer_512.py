@@ -308,7 +308,7 @@ def main():
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model = seg_dtd('', 2).to(device)
-    model = torch.nn.DataParallel(model)
+    #model = torch.nn.DataParallel(model)
 
     test_data = TamperDatasetJPEG(args.data_root, mode='test')
 

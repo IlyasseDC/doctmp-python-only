@@ -37,84 +37,67 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--data_root', type=str, default='./') # root to the dir of lmdb files
 parser.add_argument('--pth', type=str, default='dtd.pth')
 parser.add_argument('--lmdb_name', type=str, default='DocTamperV1-FCD')
-parser.add_argument('--minq', type=int, default=75)
+parser.add_argument('--minq', type=int, default=90)
 args = parser.parse_args()
-
 class TamperDataset(Dataset):
-    def __init__(self, roots, mode, minq=95, qtb=90, max_readers=64):
-        self.envs = lmdb.open(roots,max_readers=max_readers,readonly=True,lock=False,readahead=False,meminit=False)
-        with self.envs.begin(write=False) as txn:
-            self.nSamples = int(txn.get('num-samples'.encode('utf-8')))
-        self.max_nums=self.nSamples
-        self.minq = minq
-        self.mode = mode
-        with open('pks/qt_table.pk','rb') as fpk:
-            pks = pickle.load(fpk)
-        self.pks = {}
-        for k,v in pks.items():
-            self.pks[k] = torch.LongTensor(v)
-        with open('pks/'+roots+'_%d.pk'%minq,'rb') as f:
-            self.record = pickle.load(f)
-        self.hflip = torchvision.transforms.RandomHorizontalFlip(p=1.0)
-        self.vflip = torchvision.transforms.RandomVerticalFlip(p=1.0)
+    def __init__(self, img_dir, lbl_dir=None):
+        self.img_files = sorted([f for f in os.listdir(img_dir) if f.lower().endswith((".jpg",".jpeg"))])
+        self.img_dir = img_dir
+        self.lbl_dir = lbl_dir
+
         self.totsr = ToTensorV2()
-        self.toctsr =torchvision.transforms.Compose([torchvision.transforms.ToTensor(),torchvision.transforms.Normalize(mean=(0.485, 0.455, 0.406), std=(0.229, 0.224, 0.225))])
+        self.toctsr = torchvision.transforms.Compose([
+            torchvision.transforms.ToTensor(),
+            torchvision.transforms.Normalize(mean=(0.485, 0.455, 0.406),
+                                             std=(0.229, 0.224, 0.225))
+        ])
 
     def __len__(self):
-        return self.max_nums
+        return len(self.img_files)
 
     def __getitem__(self, index):
-        with self.envs.begin(write=False) as txn:
-            img_key = 'image-%09d' % index
-            imgbuf = txn.get(img_key.encode('utf-8'))
-            buf = six.BytesIO()
-            buf.write(imgbuf)
-            buf.seek(0)
-            im = Image.open(buf)
-            lbl_key = 'label-%09d' % index
-            lblbuf = txn.get(lbl_key.encode('utf-8'))
-            mask = (cv2.imdecode(np.frombuffer(lblbuf,dtype=np.uint8),0)!=0).astype(np.uint8)
-            H,W = mask.shape
-            record = self.record[index]
-            choicei = len(record)-1
-            q = int(record[-1])
-            use_qtb = self.pks[q]
-            if choicei>1:
-                q2 = int(record[-3])
-                use_qtb2 = self.pks[q2]
-            if choicei>0:
-                q1 = int(record[-2])
-                use_qtb1 = self.pks[q1]
-            mask = self.totsr(image=mask.copy())['image']
-            with tempfile.NamedTemporaryFile(delete=True) as tmp:
-                im = im.convert("L")
-                if choicei>1:
-                    im.save(tmp,"JPEG",quality=q2)
-                    im = Image.open(tmp)
-                if choicei>0:
-                    im.save(tmp,"JPEG",quality=q1)
-                    im = Image.open(tmp)
-                im.save(tmp,"JPEG",quality=q)
-                jpg = jpegio.read(tmp.name)
-                dct = jpg.coef_arrays[0].copy()
-                im = im.convert('RGB')
-            return {
-                'image': self.toctsr(im),
-                'label': mask.long(),
-                'rgb': np.clip(np.abs(dct),0,20),
-                'q':use_qtb,
-                'i':q
-            }
+        img_path = os.path.join(self.img_dir, self.img_files[index])
+
+        # --- Lire l'image et convertir en L (comme pipeline LMDB) ---
+        im = Image.open(img_path).convert("L")
+
+        # --- Charger le label (facultatif) ---
+        mask = None
+        if self.lbl_dir is not None:
+            lbl_path = os.path.join(self.lbl_dir, os.path.splitext(self.img_files[index])[0] + ".png")
+            if os.path.exists(lbl_path):
+                mask_arr = cv2.imread(lbl_path, cv2.IMREAD_GRAYSCALE)
+                mask_arr = (mask_arr > 127).astype(np.uint8)
+                mask = self.totsr(image=mask_arr.copy())['image']
+
+        # --- Lire directement le JPEG (DCT + Q-table réelles) ---
+        jpg = jpegio.read(img_path)
+        dct = jpg.coef_arrays[0].copy()
+        qtb = torch.LongTensor(jpg.quant_tables[0])
+
+        # --- Convertir en RGB pour le réseau ---
+        im_rgb = im.convert("RGB")
+
+        sample = {
+            'image': self.toctsr(im_rgb),             # entrée réseau
+            'rgb': np.clip(np.abs(dct), 0, 20),       # DCT
+            'q': qtb,                                 # Q-table réelle
+            'i': 0                                    # placeholder (plus de qualité forcée)
+        }
+        if mask is not None:
+            sample['label'] = mask.long()
+
+        return sample
 
 
 from torch.utils.data import Subset
 
 # Création du dataset
-test_data_full = TamperDataset(args.data_root + args.lmdb_name, False, minq=args.minq)
+#test_data_full = TamperDataset(args.data_root + args.lmdb_name, False, minq=args.minq)
 
 # Création du subset 
-subset_indices = list(range(1000, 1200))
-test_data = Subset(test_data_full, subset_indices)
+#subset_indices = list(range(1000, 1200))
+#test_data = Subset(test_data_full, subset_indices)
 
 
 
@@ -229,5 +212,13 @@ def eval_net_dtd(model, test_data, plot=False,device='cuda'):
         recalls = np.array(recalls).mean()
         print('[val] iou:{} pre:{} rec:{} f1:{}'.format(iu,precisons,recalls,(2*precisons*recalls/(precisons+recalls+1e-8))))
 
-eval_net_dtd(model, test_data)
+#eval_net_dtd(model, test_data)
+# Dataset basé sur LMDB
+
+# Dataset basé sur JPEG (ex: Images/ et Labels/)
+test_data_full_jpeg = TamperDataset("exported_dataset/Images", "exported_dataset/Labels")
+test_data_jpeg = Subset(test_data_full_jpeg, list(range(0, 100)))
+
+print("=== Résultats JPEG ===")
+eval_net_dtd(model, test_data_jpeg)
 
