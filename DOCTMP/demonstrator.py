@@ -4,17 +4,6 @@ import tempfile
 import numpy as np
 from PIL import Image
 import subprocess, sys
-
-# Force downgrade si numpy >= 2
-try:
-    import numpy
-    if int(numpy.__version__.split('.')[0]) >= 2:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "--no-cache-dir", "numpy==1.20.1"])
-        import importlib
-        importlib.reload(numpy)
-except Exception as e:
-    print("⚠️ Auto-downgrade numpy failed:", e)
-
 import torch
 import torchvision
 import jpegio
@@ -78,6 +67,54 @@ import streamlit as st
 from torch.cuda.amp import autocast
 
 from models.dtd import seg_dtd
+import gdown
+
+def ensure_weights():
+    WEIGHTS_DIR = "./Weights"
+    if not os.path.exists(WEIGHTS_DIR):
+        os.makedirs(WEIGHTS_DIR, exist_ok=True)
+        print("⬇️ Downloading weights from Google Drive...")
+        gdown.download_folder(
+            "https://drive.google.com/drive/folders/1K9ZtZ7qMzprb40TsvS3bbKsfsCms6ITr?usp=drive_link",  # ID du dossier
+            output=WEIGHTS_DIR,
+            quiet=False,
+            use_cookies=False
+        )
+    else:
+        print("✅ Weights folder already exists")
+
+# Appel au lancement
+ensure_weights()
+
+
+WEIGHTS_DIR = "./Weights"
+os.makedirs(WEIGHTS_DIR, exist_ok=True)
+
+MODEL_DRIVE = {
+    "🧩 DTD Original": {
+        "id": "1AbCdEfGhIjKlMnOpQrStUvWxYz123456",  # <-- remplace par l'ID Google Drive
+        "filename": "dtd_doctamper.pth"
+    },
+    "🔧 DTD Fine-tuned": {
+        "id": "7XyZaBcDeFgHiJkLmNoPqRsTuVw987654",
+        "filename": "checkpoint-best-finetune.pth"
+    },
+    "🆔 DTD ID Documents": {
+        "id": "9QrStUvWxYz987654AbCdEfGhIjKlMnOp", 
+        "filename": "checkpoint-best-id.pth"
+    }
+}
+
+def get_model_path(model_key):
+    info = MODEL_DRIVE[model_key]
+    local_path = os.path.join(WEIGHTS_DIR, info["filename"])
+
+    if not os.path.exists(local_path):
+        url = f"https://drive.google.com/uc?export=download&id={info['id']}"
+        st.info(f"📥 Downloading {model_key} weights...")
+        gdown.download(url, local_path, quiet=False)
+
+    return local_path
 
 # ==============================
 # Page Configuration
@@ -555,10 +592,9 @@ def show_detection_page():
     
     # Model configuration
     MODEL_PATHS = {
-        "🧩 DTD Original": "./Weights/dtd_doctamper.pth",
-        "🔧 DTD Fine-tuned": "./checkpointsfinetune/checkpoint-best.pth",
-        "🆔 DTD ID Documents": "./checkpoints_img/checkpoint-best.pth",
+        key: get_model_path(key) for key in MODEL_DRIVE.keys()
     }
+
     
     # File upload
     uploaded_file = st.file_uploader(
