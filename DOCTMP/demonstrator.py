@@ -3,6 +3,17 @@ import os
 import tempfile
 import numpy as np
 from PIL import Image
+import subprocess, sys
+
+# Force downgrade si numpy >= 2
+try:
+    import numpy
+    if int(numpy.__version__.split('.')[0]) >= 2:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "--no-cache-dir", "numpy==1.20.1"])
+        import importlib
+        importlib.reload(numpy)
+except Exception as e:
+    print("⚠️ Auto-downgrade numpy failed:", e)
 
 import torch
 import torchvision
