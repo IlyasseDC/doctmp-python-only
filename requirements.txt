@@ -7,7 +7,7 @@ matplotlib==3.3.4
 mmcv==1.6.0
 mmcv-full==1.7.0
 mmsegmentation==0.28.0
-numpy==1.20.1
+numpy==1.20.1          # important: keep <2
 opencv-contrib-python==4.5.5.62
 opencv-python==4.5.5.62
 opencv-python-headless==4.5.5.62
@@ -24,4 +24,4 @@ yacs==0.1.8
 torch==1.11.0+cu113
 torchvision==0.12.0+cu113
 torchaudio==0.11.0+cu113
--f https://download.pytorch.org/whl/torch_stable.html
+-f https://download.pytorch.org/whl/cu113/torch_stable.html
