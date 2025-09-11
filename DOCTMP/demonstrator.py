@@ -105,10 +105,12 @@ def get_model_path(model_key):
         gdown.download(url, local_path, quiet=False)
 
     return local_path
+
 # ==============================
 # Page Configuration
 # ==============================
 ICON_PATH = os.path.join(os.path.dirname(__file__), "assets", "Image2.png")
+ASSETS_PATH = os.path.join(os.path.dirname(__file__), "assets")
 page_icon = Image.open(ICON_PATH)
 st.set_page_config(
     page_title="DTD Document Forgery Detection",
@@ -166,6 +168,29 @@ def load_custom_css():
     .card-gradient {
         background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
         border: none;
+    }
+    
+    /* Sample image card styling */
+    .sample-image-card {
+        background: white;
+        border-radius: 12px;
+        border: 2px solid transparent;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        margin: 0.5rem 0;
+        overflow: hidden;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    .sample-image-card:hover {
+        border-color: #667eea;
+        transform: translateY(-4px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    }
+    
+    .sample-image-card.selected {
+        border-color: #451DC7;
+        box-shadow: 0 8px 25px rgba(69, 29, 199, 0.3);
     }
     
     /* Button styling */
@@ -301,13 +326,14 @@ def load_custom_css():
     .top-nav-title{
         color: #451DC7;          /* texte blanc pour contraster avec #451DC7 */
         font-weight: 800;
-        font-size: 24px;         /* ← augmente la taille (26–28px si tu veux + gros) */
+        font-size: 20px;         /* ← augmente la taille (26–28px si tu veux + gros) */
         line-height: 1.1;
         margin: 0;
         white-space: nowrap;
         display: flex; 
         align-items: center; 
-        gap: 10px;               /* petit espace entre l’icône et le texte */
+        gap: 10px;               /* petit espace entre l'icône et le texte */
+        margin-bottom: 20px;
     }
 
     /* Boutons nav : taille uniforme (sans toucher aux autres boutons de l'app) */
@@ -330,6 +356,47 @@ def load_custom_css():
             width: 120px; height: 38px;
         }
     }
+    
+    /* Tabs styling */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+        background: white;
+        padding: 8px;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+        /* Sample image button specific styling */
+    .sample-image-button button[data-testid="stBaseButton-secondary"] {
+        background: none !important;
+        border: 2px solid transparent !important;
+        border-radius: 12px !important;
+        padding: 0 !important;
+        height: 200px !important;
+        width: 100% !important;
+        color: transparent !important;
+        font-size: 0 !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
+        transition: all 0.3s ease !important;
+    }
+    
+    .sample-image-button button[data-testid="stBaseButton-secondary"]:hover {
+        transform: translateY(-4px) !important;
+        box-shadow: 0 8px 25px rgba(69,29,199,0.3) !important;
+        border-color: #451DC7 !important;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 50px;
+        padding: 12px 24px;
+        background-color: transparent;
+        border-radius: 8px;
+        color: #666;
+        font-weight: 500;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background-color: #451DC7 !important;
+        color: white !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -343,6 +410,32 @@ def create_card(content, gradient=False):
 def create_alert(message, alert_type="success"):
     icon = "✅" if alert_type == "success" else "⚠️"
     return f'<div class="alert-{alert_type}"><strong>{icon} {message}</strong></div>'
+
+def get_sample_images():
+    """Get list of sample images from assets folder"""
+    sample_images = []
+    
+    # Define supported image extensions
+    extensions = ['*.jpg', '*.jpeg', '*.png', '*.JPG', '*.JPEG', '*.PNG']
+    
+    # Search for images in assets folder
+    for extension in extensions:
+        files = glob.glob(os.path.join(ASSETS_PATH, extension))
+        sample_images.extend(files)
+    
+    # Remove the icon file from the list
+    sample_images = [img for img in sample_images if not img.endswith('Image2.png')]
+    
+    # Create a dictionary with custom names (you can modify this later)
+    image_dict = {}
+    for i, img_path in enumerate(sample_images):
+        filename = os.path.basename(img_path)
+        name_without_ext = os.path.splitext(filename)[0]
+        # You can customize these names later
+        display_name = name_without_ext.replace('_', ' ').title()
+        image_dict[display_name] = img_path
+    
+    return image_dict
 
 # ==============================
 # Preprocessing Functions
@@ -456,6 +549,75 @@ def overlay_mask(image: Image.Image, mask: np.ndarray, color=(255, 0, 0)):
     blended[mask == 1] = (0.5 * img_np[mask == 1] + 0.5 * np.array(color)).astype(np.uint8)
     return Image.fromarray(blended)
 
+def analyze_image(image_source, image_data=None, image_path=None):
+    """Analyze image for tampering detection"""
+    # Map models -> Google Drive
+    MODEL_MAP = {
+        "🧩 DTD Original": "🧩 DTD Original",
+        "🔧 DTD Fine-tuned": "📦 Swin ImageNet",   # ← adapte ici si tu as mis le bon poids
+        "🆔 DTD ID Documents": "📦 VPH ImageNet",  # ← adapte aussi
+    }
+        
+    try:
+        # Handle different image sources
+        if image_source == "upload" and image_data is not None:
+            # For uploaded files
+            image = Image.open(image_data).convert("RGB")
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+                tmp.write(image_data.getbuffer())
+                temp_img_path = tmp.name
+        elif image_source == "sample" and image_path is not None:
+            # For sample images
+            image = Image.open(image_path).convert("RGB")
+            temp_img_path = image_path
+        else:
+            return None, None, "Invalid image source"
+        
+        # Load model
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        model = seg_dtd("", n_class=2).to(device)
+        
+        # Handle DataParallel for original DTD model
+        if st.session_state.selected_model == "🧩 DTD Original":
+            model = torch.nn.DataParallel(model)
+        
+        # Load checkpoint
+        # Récupère le chemin du poids depuis Drive (cache local si déjà téléchargé)
+        model_key = st.session_state.selected_model
+        if model_key not in MODEL_MAP:
+            return None, None, f"Unknown model: {model_key}"
+
+        model_path = get_model_path(MODEL_MAP[model_key])
+        
+        ckpt = torch.load(model_path, map_location="cpu")
+        model.load_state_dict(ckpt["state_dict"])
+        model.eval()
+        
+        # Preprocessing
+        if st.session_state.selected_model == "🧩 DTD Original":
+            patches, size, patch_size = preprocess_jpeg_image(temp_img_path)
+        else:
+            patches, size, patch_size = preprocess_single_image(image, quality=100)
+        
+        # Run inference
+        mask = run_inference(model, patches, size, patch_size=patch_size, device=device)
+        overlay = overlay_mask(image, mask)
+        
+        # Cleanup temporary file for uploaded images
+        if image_source == "upload":
+            os.unlink(temp_img_path)
+        
+        return mask, overlay, None
+        
+    except Exception as e:
+        # Cleanup temporary file in case of error
+        if image_source == "upload" and 'temp_img_path' in locals():
+            try:
+                os.unlink(temp_img_path)
+            except:
+                pass
+        return None, None, str(e)
+
 # ==============================
 # Main Application
 # ==============================
@@ -468,6 +630,8 @@ def main():
         st.session_state.page = "home"
     if "selected_model" not in st.session_state:
         st.session_state.selected_model = "🧩 DTD Original"
+    if "selected_sample_image" not in st.session_state:
+        st.session_state.selected_sample_image = None
     
     # Navigation header
     # ===== Barre de navigation (titre à gauche, boutons à droite) =====
@@ -499,13 +663,6 @@ def main():
         if st.button("About", key="nav_about"):
             st.session_state.page = "about"; st.rerun()
 
-
-
-
-    
-    # Add custom CSS for hidden navigation buttons
-
-    
     st.markdown("---")
     
     # Page routing
@@ -557,7 +714,7 @@ def show_home_page():
                 <p><strong>Best for:</strong> {model_info["best_for"]}</p>
             '''), unsafe_allow_html=True)
             # Select button under each card
-            if st.button(f"Select", key=f"select_{model_key}"):
+            if st.button(f"Select", key=f"select_{model_key}", use_container_width=True):
                 st.session_state.selected_model = model_key
     # Current selection display
     if st.session_state.selected_model:
@@ -565,7 +722,7 @@ def show_home_page():
                    unsafe_allow_html=True)
     
     # Start detection button
-    if st.button("🚀 Start Detection", key="start_detection"):
+    if st.button("Go to detection page", key="start_detection", use_container_width=True):
         st.session_state.page = "detection"
         st.rerun()
 
@@ -576,96 +733,139 @@ def show_detection_page():
     # Model info
     st.markdown(create_card(f'''
         <h4>Current Model: {st.session_state.selected_model}</h4>
-        <p>Upload an image to analyze for potential document tampering.</p>
+        <p>Upload an image or choose from sample images to analyze for potential document tampering.</p>
     '''), unsafe_allow_html=True)
     
-    # Model configuration
-    MODEL_PATHS = {
-        key: get_model_path(key) for key in MODEL_DRIVE.keys()
-    }
+    # Create tabs for different image input methods
+    tab1, tab2 = st.tabs(["📂 Upload Image", "🖼️ Sample Images"])
+    
+    image_to_analyze = None
+    image_source = None
+    image_path = None
+    
+    with tab1:
+        st.markdown("### Upload Your Document")
+        uploaded_file = st.file_uploader(
+            "Choose an image file",
+            type=["jpg", "jpeg", "png"],
+            help="Supported formats: JPG, JPEG, PNG"
+        )
+        
+        if uploaded_file is not None:
+            image_to_analyze = Image.open(uploaded_file).convert("RGB")
+            image_source = "upload"
+            st.success("✅ Image uploaded successfully!")
+    
+    with tab2:
+        st.markdown("### Choose from Sample Images")
+        sample_images = get_sample_images()
 
+        if sample_images:
+            image_paths = list(sample_images.values())
+            
+            st.markdown("**Click directly on any image to select it:**")
+            st.markdown("<br>", unsafe_allow_html=True)
+            # Display images in a grid with proper click functionality
+            cols_per_row = 3
+            for i in range(0, len(image_paths), cols_per_row):
+                cols = st.columns(cols_per_row)
+                for j, col in enumerate(cols):
+                    if i + j < len(image_paths):
+                        img_path = image_paths[i + j]
+                        with col:
+                            # Display image with custom styling
+                            img = Image.open(img_path)
+                            
+                            # Check if selected
+                            is_selected = st.session_state.get("selected_sample_image") == img_path
+                            border_color = "#451DC7" if is_selected else "#e1e5e9"
+                            border_width = "3px" if is_selected else "2px"
+                            
+                            # Custom container with selection indicator
+                            st.markdown(f'''
+                            <div style="
+                                border: {border_width} solid {border_color};
+                                border-radius: 12px;
+                                padding: 8px;
+                                margin-bottom: 15px;
+                                background: white;
+                                box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+                                transition: all 0.3s ease;
+                                {'box-shadow: 0 8px 25px rgba(69, 29, 199, 0.3);' if is_selected else ''}
+                            ''', unsafe_allow_html=True)
+                            
+                            # Display the actual image
+                            st.image(img, use_container_width=True)
+                            
+                            # Image name and selection button
+                            img_name = os.path.basename(img_path)
+                            if is_selected:
+                                st.success("✅ Selected")
+                            else:
+                                if st.button(f"Select", key=f"img_btn_{i}_{j}", use_container_width=True):
+                                    st.session_state.selected_sample_image = img_path
+                                    st.session_state.current_image = img
+                                    st.session_state.current_image_source = "sample"
+                                    st.rerun()
+                            
+                            st.markdown("</div>", unsafe_allow_html=True)
+
+            # Display currently selected image info
+            if st.session_state.get("selected_sample_image"):
+                image_path = st.session_state.selected_sample_image
+                image_to_analyze = Image.open(image_path).convert("RGB")
+                image_source = "sample"
+        else:
+            st.warning("⚠️ No sample images found in the assets folder.")
+
+    # Analysis section - moved outside tabs
+    st.markdown("---")
+    st.markdown("## 🔍 Document Analysis")
     
-    # File upload
-    uploaded_file = st.file_uploader(
-        "📂 Upload Document Image",
-        type=["jpg", "jpeg", "png"],
-        help="Supported formats: JPG, JPEG, PNG"
-    )
-    
-    if uploaded_file is not None:
-        # Display uploaded image
+    if image_to_analyze is not None:
         col1, col2 = st.columns([1, 1])
         
         with col1:
-            st.markdown(create_card('<h4>📄 Original Document</h4>'), unsafe_allow_html=True)
-            image = Image.open(uploaded_file).convert("RGB")
-            st.image(image, use_column_width=True, caption="Uploaded Image")
+            st.markdown("#### 📄 Original Document")
+            st.image(image_to_analyze, use_container_width=True, caption="Selected Image")
         
-        # Analysis button
-        if st.button("🔍 Analyze Document", key="analyze_btn"):
+        # Analysis button and results
+        if st.button("🔍 Analyze Document", key="analyze_btn", use_container_width=True):
             with st.spinner("Analyzing document for tampering..."):
-                try:
-                    # Save temporary file
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
-                        tmp.write(uploaded_file.getbuffer())
-                        img_path = tmp.name
+                if image_source == "upload":
+                    mask, overlay, error = analyze_image("upload", uploaded_file)
+                elif image_source == "sample":
+                    mask, overlay, error = analyze_image("sample", image_path=st.session_state.selected_sample_image)
+                else:
+                    error = "Invalid image source"
+                    mask, overlay = None, None
+                
+                if error:
+                    st.error(f"❌ Error during analysis: {error}")
+                elif mask is not None and overlay is not None:
+                    with col2:
+                        st.markdown("#### 🎯 Detection Results")
+                        st.image(overlay, use_container_width=True, caption="Tampering Detection Overlay")
                     
-                    # Load model
-                    device = "cuda" if torch.cuda.is_available() else "cpu"
-                    model = seg_dtd("", n_class=2).to(device)
-                    
-                    # Handle DataParallel for original DTD model
-                    if st.session_state.selected_model == "🧩 DTD Original":
-                        model = torch.nn.DataParallel(model)
-                    
-                    # Load checkpoint
-                    model_path = MODEL_PATHS[st.session_state.selected_model]
-                    if os.path.exists(model_path):
-                        ckpt = torch.load(model_path, map_location="cpu")
-                        model.load_state_dict(ckpt["state_dict"])
-                        model.eval()
+                    # Results analysis
+                    tampering_detected = mask.sum() > 0
+                    if tampering_detected:
+                        st.warning("⚠️ **TAMPERING DETECTED** - Suspicious regions found in the document")
+                        tampered_pixels = mask.sum()
+                        total_pixels = mask.shape[0] * mask.shape[1]
+                        percentage = (tampered_pixels / total_pixels) * 100
                         
-                        # Preprocessing
-                        if st.session_state.selected_model == "🧩 DTD Original":
-                            patches, size, patch_size = preprocess_jpeg_image(img_path)
-                        else:
-                            patches, size, patch_size = preprocess_single_image(image, quality=100)
-                        
-                        # Run inference
-                        mask = run_inference(model, patches, size, patch_size=patch_size, device=device)
-                        overlay = overlay_mask(image, mask)
-                        
-                        # Display results
-                        with col2:
-                            st.markdown(create_card('<h4>🎯 Detection Results</h4>'), unsafe_allow_html=True)
-                            st.image(overlay, use_column_width=True, caption="Tampering Detection Overlay")
-                        
-                        # Analysis results
-                        tampering_detected = mask.sum() > 0
-                        if tampering_detected:
-                            st.markdown(create_alert("TAMPERING DETECTED - Suspicious regions found in the document", "warning"), 
-                                       unsafe_allow_html=True)
-                            tampered_pixels = mask.sum()
-                            total_pixels = mask.shape[0] * mask.shape[1]
-                            percentage = (tampered_pixels / total_pixels) * 100
-                            st.markdown(create_card(f'''
-                                <h4>📊 Detection Statistics</h4>
-                                <p><strong>Tampered pixels:</strong> {tampered_pixels:,}</p>
-                                <p><strong>Total pixels:</strong> {total_pixels:,}</p>
-                                <p><strong>Tampering ratio:</strong> {percentage:.2f}%</p>
-                            '''), unsafe_allow_html=True)
-                        else:
-                            st.markdown(create_alert("✅ NO TAMPERING DETECTED - Document appears authentic", "success"), 
-                                       unsafe_allow_html=True)
-                    
+                        st.markdown(f'''
+                        **📊 Detection Statistics:**
+                        - **Tampered pixels:** {tampered_pixels:,}
+                        - **Total pixels:** {total_pixels:,}
+                        - **Tampering ratio:** {percentage:.2f}%
+                        ''')
                     else:
-                        st.error(f"❌ Model file not found: {model_path}")
-                    
-                    # Cleanup
-                    os.unlink(img_path)
-                    
-                except Exception as e:
-                    st.error(f"❌ Error during analysis: {str(e)}")
+                        st.success("✅ **NO TAMPERING DETECTED** - Document appears authentic")
+    else:
+        st.info("👆 Please upload an image or select a sample image to start analysis.")
+
 
 def show_about_page():
     """About page with information about the system"""
@@ -705,6 +905,18 @@ def show_about_page():
             <li><strong>Output:</strong> Binary mask highlighting tampered regions</li>
             <li><strong>Framework:</strong> PyTorch with CUDA acceleration</li>
         </ul>
+    '''), unsafe_allow_html=True)
+    
+    st.markdown(create_card('''
+        <h3>📚 How to Use Sample Images</h3>
+        <p>The system now includes sample images that you can use to test the detection capabilities:</p>
+        <ul>
+            <li><strong>Sample Images Tab:</strong> Browse through pre-loaded test images</li>
+            <li><strong>One-Click Selection:</strong> Simply click "Select" under any image to analyze it</li>
+            <li><strong>Variety of Cases:</strong> Images include both authentic and tampered documents</li>
+            <li><strong>Custom Names:</strong> Each sample image has a descriptive name for easy identification</li>
+        </ul>
+        <p><em>Note: Sample images are stored in the assets folder and automatically detected by the system.</em></p>
     '''), unsafe_allow_html=True)
 
 if __name__ == "__main__":
