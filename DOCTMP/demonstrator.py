@@ -82,7 +82,6 @@ def ensure_weights():
         )
     else:
         print("✅ Weights folder already exists")
-
 # Appel au lancement
 ensure_weights()
 
@@ -92,15 +91,15 @@ os.makedirs(WEIGHTS_DIR, exist_ok=True)
 
 MODEL_DRIVE = {
     "🧩 DTD Original": {
-        "id": "1AbCdEfGhIjKlMnOpQrStUvWxYz123456",  # <-- remplace par l'ID Google Drive
+        "id": "1K9ZtZ7qMzprb40TsvS3bbKsfsCms6ITr",  # <-- remplace par l'ID Google Drive
         "filename": "dtd_doctamper.pth"
     },
     "🔧 DTD Fine-tuned": {
-        "id": "7XyZaBcDeFgHiJkLmNoPqRsTuVw987654",
+        "id": "1K9ZtZ7qMzprb40TsvS3bbKsfsCms6ITr",
         "filename": "checkpoint-best-finetune.pth"
     },
     "🆔 DTD ID Documents": {
-        "id": "9QrStUvWxYz987654AbCdEfGhIjKlMnOp", 
+        "id": "1K9ZtZ7qMzprb40TsvS3bbKsfsCms6ITr", 
         "filename": "checkpoint-best-id.pth"
     }
 }
