@@ -531,7 +531,7 @@ def show_home_page():
                 <p><strong>Best for:</strong> {model_info["best_for"]}</p>
             '''), unsafe_allow_html=True)
             # Select button under each card
-            if st.button(f"Select", key=f"select_{model_key}", use_container_width=True):
+            if st.button(f"Select", key=f"select_{model_key}", use_column_width=True):
                 st.session_state.selected_model = model_key
     # Current selection display
     if st.session_state.selected_model:
@@ -539,7 +539,7 @@ def show_home_page():
                    unsafe_allow_html=True)
     
     # Start detection button
-    if st.button("🚀 Start Detection", key="start_detection", use_container_width=True):
+    if st.button("🚀 Start Detection", key="start_detection", use_column_width=True):
         st.session_state.page = "detection"
         st.rerun()
 
@@ -574,10 +574,10 @@ def show_detection_page():
         with col1:
             st.markdown(create_card('<h4>📄 Original Document</h4>'), unsafe_allow_html=True)
             image = Image.open(uploaded_file).convert("RGB")
-            st.image(image, use_container_width=True, caption="Uploaded Image")
+            st.image(image, use_column_width=True, caption="Uploaded Image")
         
         # Analysis button
-        if st.button("🔍 Analyze Document", key="analyze_btn", use_container_width=True):
+        if st.button("🔍 Analyze Document", key="analyze_btn", use_column_width=True):
             with st.spinner("Analyzing document for tampering..."):
                 try:
                     # Save temporary file
@@ -613,7 +613,7 @@ def show_detection_page():
                         # Display results
                         with col2:
                             st.markdown(create_card('<h4>🎯 Detection Results</h4>'), unsafe_allow_html=True)
-                            st.image(overlay, use_container_width=True, caption="Tampering Detection Overlay")
+                            st.image(overlay, use_column_width=True, caption="Tampering Detection Overlay")
                         
                         # Analysis results
                         tampering_detected = mask.sum() > 0
