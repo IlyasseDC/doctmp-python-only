@@ -716,7 +716,7 @@ def show_home_page():
                 <p><strong>Best for:</strong> {model_info["best_for"]}</p>
             '''), unsafe_allow_html=True)
             # Select button under each card
-            if st.button(f"Select", key=f"select_{model_key}", use_container_width=True):
+            if st.button(f"Select", key=f"select_{model_key}"):
                 st.session_state.selected_model = model_key
     # Current selection display
     if st.session_state.selected_model:
@@ -724,7 +724,7 @@ def show_home_page():
                    unsafe_allow_html=True)
     
     # Start detection button
-    if st.button("Go to detection page", key="start_detection", use_container_width=True):
+    if st.button("Go to detection page", key="start_detection"):
         st.session_state.page = "detection"
         st.rerun()
 
@@ -797,14 +797,14 @@ def show_detection_page():
                             ''', unsafe_allow_html=True)
                             
                             # Display the actual image
-                            st.image(img, use_container_width=True)
+                            st.image(img, use_column_width=True)
                             
                             # Image name and selection button
                             img_name = os.path.basename(img_path)
                             if is_selected:
                                 st.success("✅ Selected")
                             else:
-                                if st.button(f"Select", key=f"img_btn_{i}_{j}", use_container_width=True):
+                                if st.button(f"Select", key=f"img_btn_{i}_{j}"):
                                     st.session_state.selected_sample_image = img_path
                                     st.session_state.current_image = img
                                     st.session_state.current_image_source = "sample"
@@ -829,10 +829,10 @@ def show_detection_page():
         
         with col1:
             st.markdown("#### 📄 Original Document")
-            st.image(image_to_analyze, use_container_width=True, caption="Selected Image")
+            st.image(image_to_analyze, use_column_width=True, caption="Selected Image")
         
         # Analysis button and results
-        if st.button("🔍 Analyze Document", key="analyze_btn", use_container_width=True):
+        if st.button("🔍 Analyze Document", key="analyze_btn"):
             with st.spinner("Analyzing document for tampering..."):
                 if image_source == "upload":
                     mask, overlay, error = analyze_image("upload", uploaded_file)
@@ -847,7 +847,7 @@ def show_detection_page():
                 elif mask is not None and overlay is not None:
                     with col2:
                         st.markdown("#### 🎯 Detection Results")
-                        st.image(overlay, use_container_width=True, caption="Tampering Detection Overlay")
+                        st.image(overlay, use_column_width=True, caption="Tampering Detection Overlay")
                     
                     # Results analysis
                     tampering_detected = mask.sum() > 0
