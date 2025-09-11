@@ -531,7 +531,7 @@ def show_home_page():
                 <p><strong>Best for:</strong> {model_info["best_for"]}</p>
             '''), unsafe_allow_html=True)
             # Select button under each card
-            if st.button(f"Select", key=f"select_{model_key}", use_column_width=True):
+            if st.button(f"Select", key=f"select_{model_key}"):
                 st.session_state.selected_model = model_key
     # Current selection display
     if st.session_state.selected_model:
@@ -539,7 +539,7 @@ def show_home_page():
                    unsafe_allow_html=True)
     
     # Start detection button
-    if st.button("🚀 Start Detection", key="start_detection", use_column_width=True):
+    if st.button("🚀 Start Detection", key="start_detection"):
         st.session_state.page = "detection"
         st.rerun()
 
@@ -577,7 +577,7 @@ def show_detection_page():
             st.image(image, use_column_width=True, caption="Uploaded Image")
         
         # Analysis button
-        if st.button("🔍 Analyze Document", key="analyze_btn", use_column_width=True):
+        if st.button("🔍 Analyze Document", key="analyze_btn"):
             with st.spinner("Analyzing document for tampering..."):
                 try:
                     # Save temporary file
