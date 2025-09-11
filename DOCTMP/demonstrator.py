@@ -77,6 +77,8 @@ from torch.cuda.amp import autocast
 
 from models.dtd import seg_dtd
 import gdown
+import glob
+
 WEIGHTS_DIR = "./Weights"
 os.makedirs(WEIGHTS_DIR, exist_ok=True)
 
