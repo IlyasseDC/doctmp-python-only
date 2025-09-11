@@ -28,3 +28,5 @@ torchaudio==0.11.0+cu113
 
 numpy==1.20.1 
 -c constraints.txt
+# 🔑 streamlit doit être compatible avec numpy<2
+streamlit==1.28.2
