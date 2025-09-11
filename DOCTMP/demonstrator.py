@@ -68,39 +68,21 @@ from torch.cuda.amp import autocast
 
 from models.dtd import seg_dtd
 import gdown
-
-def ensure_weights():
-    WEIGHTS_DIR = "./Weights"
-    if not os.path.exists(WEIGHTS_DIR):
-        os.makedirs(WEIGHTS_DIR, exist_ok=True)
-        print("⬇️ Downloading weights from Google Drive...")
-        gdown.download_folder(
-            "https://drive.google.com/drive/folders/1K9ZtZ7qMzprb40TsvS3bbKsfsCms6ITr?usp=drive_link",  # ID du dossier
-            output=WEIGHTS_DIR,
-            quiet=False,
-            use_cookies=False
-        )
-    else:
-        print("✅ Weights folder already exists")
-# Appel au lancement
-ensure_weights()
-
-
 WEIGHTS_DIR = "./Weights"
 os.makedirs(WEIGHTS_DIR, exist_ok=True)
 
 MODEL_DRIVE = {
     "🧩 DTD Original": {
-        "id": "1K9ZtZ7qMzprb40TsvS3bbKsfsCms6ITr",  # <-- remplace par l'ID Google Drive
+        "id": "1a1qR_t1ZYbUB_XnWrhftWX-QfBeoGdLF",  # dtd_doctamper.pth
         "filename": "dtd_doctamper.pth"
     },
-    "🔧 DTD Fine-tuned": {
-        "id": "1K9ZtZ7qMzprb40TsvS3bbKsfsCms6ITr",
-        "filename": "checkpoint-best-finetune.pth"
+    "📦 Swin ImageNet": {
+        "id": "1cz6dnFsI9tpfad7E1Y7uR4LFKiJHgv1U",  # swin_imagenet.pt
+        "filename": "swin_imagenet.pt"
     },
-    "🆔 DTD ID Documents": {
-        "id": "1K9ZtZ7qMzprb40TsvS3bbKsfsCms6ITr", 
-        "filename": "checkpoint-best-id.pth"
+    "📦 VPH ImageNet": {
+        "id": "1CeI6_dVjD7aN1417SZEy6yL5sQXFtQyM",  # vph_imagenet.pt
+        "filename": "vph_imagenet.pt"
     }
 }
 
@@ -110,11 +92,10 @@ def get_model_path(model_key):
 
     if not os.path.exists(local_path):
         url = f"https://drive.google.com/uc?export=download&id={info['id']}"
-        st.info(f"📥 Downloading {model_key} weights...")
+        st.info(f"📥 Downloading {info['filename']} ...")
         gdown.download(url, local_path, quiet=False)
 
     return local_path
-
 # ==============================
 # Page Configuration
 # ==============================
