@@ -436,7 +436,7 @@ def get_sample_images():
     sample_images = []
     
     # Define supported image extensions
-    extensions = ['*.jpg', '*.jpeg', '*.png', '*.JPG', '*.JPEG', '*.PNG']
+    extensions = ['*.jpg', '*.jpeg', '*.png', '*.JPG', '*.JPEG']
     
     # Search for images in assets folder
     for extension in extensions:
@@ -777,7 +777,7 @@ def show_detection_page():
         uploaded_file = st.file_uploader(
             "Choose an image file",
             type=["jpg", "jpeg", "png"],
-            help="Supported formats: JPG, JPEG, PNG"
+            help="Supported formats: JPG, JPEG"
         )
         
         if uploaded_file is not None:
