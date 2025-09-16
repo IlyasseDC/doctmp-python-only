@@ -35,9 +35,77 @@ from segmentation_models_pytorch.base import modules as md
 from typing import Optional, Union, List
 from segmentation_models_pytorch.base import SegmentationModel
 import sys
-from demonstrator import get_model_path 
-sys.modules['dtd'] = sys.modules[__name__]
+import os
+import gdown
 
+sys.modules['dtd'] = sys.modules[__name__]
+WEIGHTS_DIR = "DTD_Weights/Weights"
+os.makedirs(WEIGHTS_DIR, exist_ok=True)
+
+# ==============================
+# Mapping modèles -> Drive
+# ==============================
+MODEL_DRIVE = {
+    "🧩 DTD Original": {
+        "id": "1a1qR_t1ZYbUB_XnWrhftWX-QfBeoGdLF",
+        "filename": "dtd_doctamper.pth"
+    },
+    "🔧 DTD Fine-tuned": {
+        "id": None,  # poids locaux
+        "filename": "./checkpointsfinetune/checkpoint-best.pth"
+    },
+    "🆔 DTD ID Documents": {
+        "id": None,  # poids locaux
+        "filename": "./checkpoints_img/checkpoint-best.pth"
+    },
+    "📦 Swin ImageNet": {
+        "id": "1cz6dnFsI9tpfad7E1Y7uR4LFKiJHgv1U",
+        "filename": "swin_imagenet.pt"
+    },
+    "📦 VPH ImageNet": {
+        "id": "1CeI6_dVjD7aN1417SZEy6yL5sQXFtQyM",
+        "filename": "vph_imagenet.pt"
+    }
+}
+
+# ==============================
+# Téléchargement de tous les poids au démarrage
+# ==============================
+def download_all_weights():
+    print(f"📥 Vérification des poids dans : {WEIGHTS_DIR}")
+    for key, info in MODEL_DRIVE.items():
+        # Cas poids locaux
+        if info["id"] is None and info["filename"].startswith("./"):
+            if not os.path.exists(info["filename"]):
+                print(f"⚠️ Poids local manquant : {info['filename']}")
+            continue
+
+        local_path = os.path.join(WEIGHTS_DIR, info["filename"])
+        if not os.path.exists(local_path):
+            url = f"https://drive.google.com/uc?export=download&id={info['id']}"
+            print(f"📥 Téléchargement de {info['filename']} ...")
+            gdown.download(url, local_path, quiet=False)
+            if os.path.exists(local_path):
+                print(f"✅ Téléchargé : {local_path}")
+            else:
+                print(f"❌ Échec : {local_path}")
+        else:
+            print(f"✔️ Déjà présent : {info['filename']}")
+
+# ==============================
+# Retourne le chemin d’un poids
+# ==============================
+def get_model_path(model_key: str) -> str:
+    info = MODEL_DRIVE[model_key]
+
+    # poids locaux
+    if info["id"] is None and info["filename"].startswith("./"):
+        return info["filename"]
+
+    # poids téléchargés
+    return os.path.join(WEIGHTS_DIR, info["filename"])
+
+download_all_weights()
 
 class LayerNorm(nn.Module):
     def __init__(self, normalized_shape, eps=1e-6, data_format="channels_last"):
