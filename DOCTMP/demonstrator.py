@@ -79,7 +79,7 @@ from models.dtd import seg_dtd
 import gdown
 import glob
 
-WEIGHTS_DIR = "./Weights"
+WEIGHTS_DIR = "DTD_Weights/Weights"
 os.makedirs(WEIGHTS_DIR, exist_ok=True)
 
 MODEL_DRIVE = {
