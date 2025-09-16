@@ -611,7 +611,16 @@ def analyze_image(image_source, image_data=None, image_path=None):
         model_path = get_model_path(MODEL_MAP[model_key])
         
         ckpt = torch.load(model_path, map_location="cpu")
-        model.load_state_dict(ckpt["state_dict"])
+
+        if "state_dict" in ckpt:
+            state_dict = ckpt["state_dict"]
+        elif "model" in ckpt:
+            state_dict = ckpt["model"]
+        else:
+            state_dict = ckpt  # déjà un state_dict
+
+        model.load_state_dict(state_dict, strict=False)
+
         model.eval()
         
         # Preprocessing
