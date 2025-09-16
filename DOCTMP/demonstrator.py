@@ -217,7 +217,8 @@ def load_custom_css():
     /* Button styling */
     .stButton > button {
         background: linear-gradient(135deg, #451DC7 0%, #764ba2 100%);
-        color: white;
+                
+        color: #451DC7;;
         border: none;
         border-radius: 12px;
         padding: 0.75rem 2rem;
