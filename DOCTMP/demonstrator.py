@@ -77,33 +77,15 @@ from torch.cuda.amp import autocast
 from models.dtd import seg_dtd
 import gdown
 import glob
-file_id = "1CeI6_dVjD7aN1417SZEy6yL5sQXFtQyM"
-url = f"https://drive.google.com/uc?export=download&id={file_id}"
-output = "vph_imagenet.pt"
-
-gdown.download(url, output, quiet=False)
-print("✅ Téléchargement terminé:", output)
+# ==============================
+# Dossier des poids
+# ==============================
 WEIGHTS_DIR = "DTD_Weights/Weights"
 os.makedirs(WEIGHTS_DIR, exist_ok=True)
-def debug_drive_and_weights():
-    st.write("📂 Contenu de DTD_Weights/Weights :")
-    if os.path.exists(WEIGHTS_DIR):
-        st.write(os.listdir(WEIGHTS_DIR))
-    else:
-        st.write("❌ Le dossier n'existe pas :", WEIGHTS_DIR)
 
-    st.write("🔗 Test accès Google Drive avec gdown :")
-    try:
-        test_id = "1a1qR_t1ZYbUB_XnWrhftWX-QfBeoGdLF"  # dtd_doctamper.pth
-        test_path = os.path.join(WEIGHTS_DIR, "test_download.pth")
-        if not os.path.exists(test_path):
-            import gdown
-            url = f"https://drive.google.com/uc?export=download&id={test_id}"
-            gdown.download(url, test_path, quiet=False)
-        st.write("✅ Téléchargement OK :", test_path)
-    except Exception as e:
-        st.error(f"❌ Erreur accès Drive : {e}")
-
+# ==============================
+# Mapping modèles -> Drive
+# ==============================
 MODEL_DRIVE = {
     "🧩 DTD Original": {
         "id": "1a1qR_t1ZYbUB_XnWrhftWX-QfBeoGdLF",
@@ -126,30 +108,45 @@ MODEL_DRIVE = {
         "filename": "vph_imagenet.pt"
     }
 }
+
+# ==============================
+# Utils pour debug
+# ==============================
 def list_weights():
-    st.write("📂 Contents of WEIGHTS_DIR:")
+    st.write("📂 Contenu de DTD_Weights/Weights :")
     for f in os.listdir(WEIGHTS_DIR):
         st.write("-", f)
 
-WEIGHTS_DIR = "DTD_Weights/Weights"
-os.makedirs(WEIGHTS_DIR, exist_ok=True)
-
-def get_model_path(model_key):
+# ==============================
+# Téléchargement + accès modèle
+# ==============================
+def get_model_path(model_key: str) -> str:
+    """Retourne le chemin local du modèle, télécharge si besoin."""
     info = MODEL_DRIVE[model_key]
+
+    # Cas spécial : modèles locaux (pas sur Drive)
+    if info["id"] is None and info["filename"].startswith("./"):
+        if not os.path.exists(info["filename"]):
+            raise FileNotFoundError(f"❌ Fichier manquant : {info['filename']}")
+        return info["filename"]
+
+    # Chemin local dans WEIGHTS_DIR
     local_path = os.path.join(WEIGHTS_DIR, info["filename"])
     st.write(f"🔍 get_model_path -> {local_path}")
 
+    # Téléchargement si absent
     if not os.path.exists(local_path):
         if info["id"] is None:
             raise FileNotFoundError(f"❌ Pas d’ID Drive pour {info['filename']}")
         url = f"https://drive.google.com/uc?export=download&id={info['id']}"
-        st.info(f"📥 Downloading {info['filename']} ...")
+        st.info(f"📥 Téléchargement de {info['filename']} ...")
         gdown.download(url, local_path, quiet=False)
 
+    # Vérification
+    if not os.path.exists(local_path):
+        raise FileNotFoundError(f"❌ Téléchargement échoué : {local_path}")
+
     return local_path
-
-
-
 
 # ==============================
 # Page Configuration
