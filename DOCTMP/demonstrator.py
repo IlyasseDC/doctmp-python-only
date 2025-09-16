@@ -347,13 +347,14 @@ def load_custom_css():
     .top-nav-title{
         color: #451DC7;          /* texte blanc pour contraster avec #451DC7 */
         font-weight: 800;
-        font-size: 20px;         /* ← augmente la taille (26–28px si tu veux + gros) */
+        font-size: 18px;         /* ← augmente la taille (26–28px si tu veux + gros) */
         line-height: 1.1;
         margin: 0;
         white-space: nowrap;
         display: flex; 
         align-items: center; 
         gap: 10px;               /* petit espace entre l'icône et le texte */
+        margin-bottom: 20px;
         margin-bottom: 20px;
     }
 
@@ -655,10 +656,6 @@ def main():
     # Load custom CSS
     load_custom_css()
     download_all_weights()
-
-    # Vérifier le contenu du dossier
-    st.write("📂 Fichiers disponibles dans WEIGHTS_DIR :")
-    st.write(os.listdir(WEIGHTS_DIR))
     # Initialize session state
     if "page" not in st.session_state:
         st.session_state.page = "home"
