@@ -92,11 +92,11 @@ MODEL_DRIVE = {
         "filename": "dtd_doctamper.pth"
     },
     "🔧 DTD Fine-tuned": {
-        "id": None,  # pas sur Drive
+        "id": None,  # poids locaux
         "filename": "./checkpointsfinetune/checkpoint-best.pth"
     },
     "🆔 DTD ID Documents": {
-        "id": None,  # pas sur Drive
+        "id": None,  # poids locaux
         "filename": "./checkpoints_img/checkpoint-best.pth"
     },
     "📦 Swin ImageNet": {
@@ -110,43 +110,42 @@ MODEL_DRIVE = {
 }
 
 # ==============================
-# Utils pour debug
+# Téléchargement de tous les poids au démarrage
 # ==============================
-def list_weights():
-    st.write("📂 Contenu de DTD_Weights/Weights :")
-    for f in os.listdir(WEIGHTS_DIR):
-        st.write("-", f)
+def download_all_weights():
+    st.write("📥 Vérification des poids dans :", WEIGHTS_DIR)
+    for key, info in MODEL_DRIVE.items():
+        # Cas poids locaux
+        if info["id"] is None and info["filename"].startswith("./"):
+            if not os.path.exists(info["filename"]):
+                st.warning(f"⚠️ Poids local manquant : {info['filename']}")
+            continue
+
+        local_path = os.path.join(WEIGHTS_DIR, info["filename"])
+        if not os.path.exists(local_path):
+            url = f"https://drive.google.com/uc?export=download&id={info['id']}"
+            st.info(f"📥 Téléchargement de {info['filename']} ...")
+            gdown.download(url, local_path, quiet=False)
+            if os.path.exists(local_path):
+                st.success(f"✅ Téléchargé : {local_path}")
+            else:
+                st.error(f"❌ Échec : {local_path}")
+        else:
+            st.write(f"✔️ Déjà présent : {info['filename']}")
 
 # ==============================
-# Téléchargement + accès modèle
+# Retourne le chemin d’un poids
 # ==============================
 def get_model_path(model_key: str) -> str:
-    """Retourne le chemin local du modèle, télécharge si besoin."""
     info = MODEL_DRIVE[model_key]
 
-    # Cas spécial : modèles locaux (pas sur Drive)
+    # poids locaux
     if info["id"] is None and info["filename"].startswith("./"):
-        if not os.path.exists(info["filename"]):
-            raise FileNotFoundError(f"❌ Fichier manquant : {info['filename']}")
         return info["filename"]
 
-    # Chemin local dans WEIGHTS_DIR
-    local_path = os.path.join(WEIGHTS_DIR, info["filename"])
-    st.write(f"🔍 get_model_path -> {local_path}")
+    # poids téléchargés
+    return os.path.join(WEIGHTS_DIR, info["filename"])
 
-    # Téléchargement si absent
-    if not os.path.exists(local_path):
-        if info["id"] is None:
-            raise FileNotFoundError(f"❌ Pas d’ID Drive pour {info['filename']}")
-        url = f"https://drive.google.com/uc?export=download&id={info['id']}"
-        st.info(f"📥 Téléchargement de {info['filename']} ...")
-        gdown.download(url, local_path, quiet=False)
-
-    # Vérification
-    if not os.path.exists(local_path):
-        raise FileNotFoundError(f"❌ Téléchargement échoué : {local_path}")
-
-    return local_path
 
 # ==============================
 # Page Configuration
@@ -666,7 +665,11 @@ def analyze_image(image_source, image_data=None, image_path=None):
 def main():
     # Load custom CSS
     load_custom_css()
-    list_weights()
+    download_all_weights()
+
+    # Vérifier le contenu du dossier
+    st.write("📂 Fichiers disponibles dans WEIGHTS_DIR :")
+    st.write(os.listdir(WEIGHTS_DIR))
     # Initialize session state
     if "page" not in st.session_state:
         st.session_state.page = "home"
