@@ -9,9 +9,7 @@
 *.pb
 
 # Données brutes
-*.jpg
 *.txt
-*.jpeg
 *.png
 *.tif
 *.bmp
