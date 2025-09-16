@@ -80,6 +80,24 @@ import glob
 
 WEIGHTS_DIR = "DTD_Weights/Weights"
 os.makedirs(WEIGHTS_DIR, exist_ok=True)
+def debug_drive_and_weights():
+    st.write("📂 Contenu de DTD_Weights/Weights :")
+    if os.path.exists(WEIGHTS_DIR):
+        st.write(os.listdir(WEIGHTS_DIR))
+    else:
+        st.write("❌ Le dossier n'existe pas :", WEIGHTS_DIR)
+
+    st.write("🔗 Test accès Google Drive avec gdown :")
+    try:
+        test_id = "1a1qR_t1ZYbUB_XnWrhftWX-QfBeoGdLF"  # dtd_doctamper.pth
+        test_path = os.path.join(WEIGHTS_DIR, "test_download.pth")
+        if not os.path.exists(test_path):
+            import gdown
+            url = f"https://drive.google.com/uc?export=download&id={test_id}"
+            gdown.download(url, test_path, quiet=False)
+        st.write("✅ Téléchargement OK :", test_path)
+    except Exception as e:
+        st.error(f"❌ Erreur accès Drive : {e}")
 
 MODEL_DRIVE = {
     "🧩 DTD Original": {
@@ -636,7 +654,7 @@ def analyze_image(image_source, image_data=None, image_path=None):
 def main():
     # Load custom CSS
     load_custom_css()
-    
+    debug_drive_and_weights()
     # Initialize session state
     if "page" not in st.session_state:
         st.session_state.page = "home"
