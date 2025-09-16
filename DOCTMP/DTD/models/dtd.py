@@ -294,7 +294,7 @@ class DTD(SegmentationModel):
     def __init__(self, encoder_name = "resnet18", decoder_channels = (384, 192, 96, 64), classes = 1):
         super().__init__()
         self.vph = torch.load('./DTD_Weights/Weights/vph_imagenet.pt')
-        self.swin = torch.load('./Weights/swin_imagenet.pt')
+        self.swin = torch.load('./DTD_Weights/Weights/swin_imagenet.pt')
         self.fph = FPH()
         self.decoder = MID(encoder_channels=(96, 192, 384, 768), decoder_channels=decoder_channels)
         self.segmentation_head = SegmentationHead(in_channels=decoder_channels[-1], out_channels=classes, upsampling=2.0)
