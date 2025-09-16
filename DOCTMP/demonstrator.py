@@ -121,6 +121,10 @@ MODEL_DRIVE = {
         "filename": "vph_imagenet.pt"
     }
 }
+def list_weights():
+    st.write("📂 Contents of WEIGHTS_DIR:")
+    for f in os.listdir(WEIGHTS_DIR):
+        st.write("-", f)
 
 def get_model_path(model_key):
     info = MODEL_DRIVE[model_key]
@@ -654,7 +658,7 @@ def analyze_image(image_source, image_data=None, image_path=None):
 def main():
     # Load custom CSS
     load_custom_css()
-    debug_drive_and_weights()
+    list_weights()
     # Initialize session state
     if "page" not in st.session_state:
         st.session_state.page = "home"
