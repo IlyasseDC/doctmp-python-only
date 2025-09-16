@@ -41,7 +41,7 @@ def convert_weights_safe():
     # === VPH ===
     try:
         print(" Trying to load vph_imagenet.pt ...")
-        vph_model = torch.load("Weights/vph_imagenet.pt", map_location="cpu")
+        vph_model = torch.load("./DTD_Weights/Weights/vph_imagenet.pt", map_location="cpu")
         vph_state = vph_model.state_dict() if hasattr(vph_model, "state_dict") else vph_model
         torch.save(vph_state, "Converted/vph_imagenet_state.pth")
         print(" Converted: vph_imagenet_state.pth")
