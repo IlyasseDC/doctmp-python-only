@@ -355,7 +355,7 @@ def load_custom_css():
         align-items: center; 
         gap: 10px;               /* petit espace entre l'icône et le texte */
         margin-bottom: 20px;
-        margin-top: 20px;
+        margin-top: 10px;
     }
 
     /* Boutons nav : taille uniforme (sans toucher aux autres boutons de l'app) */
