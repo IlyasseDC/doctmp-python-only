@@ -314,10 +314,7 @@ def load_custom_css():
     .title-text {
         font-size: 2.5rem;
         font-weight: bold;
-        background: linear-gradient(135deg, #451DC7 0%, #6B46C1 100%);
         color: #451DC7;
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
         text-align: center;
         margin-bottom: 1rem;
     }
