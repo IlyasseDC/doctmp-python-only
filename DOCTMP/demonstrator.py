@@ -38,7 +38,6 @@ from utils import get_logger
 from metrics import IOUMetric
 
 # train_dtd_images.py
-import os
 import argparse
 import numpy as np
 from tqdm import tqdm
@@ -84,29 +83,40 @@ os.makedirs(WEIGHTS_DIR, exist_ok=True)
 
 MODEL_DRIVE = {
     "🧩 DTD Original": {
-        "id": "1a1qR_t1ZYbUB_XnWrhftWX-QfBeoGdLF",  # dtd_doctamper.pth
+        "id": "1a1qR_t1ZYbUB_XnWrhftWX-QfBeoGdLF",
         "filename": "dtd_doctamper.pth"
     },
+    "🔧 DTD Fine-tuned": {
+        "id": None,  # pas sur Drive
+        "filename": "./checkpointsfinetune/checkpoint-best.pth"
+    },
+    "🆔 DTD ID Documents": {
+        "id": None,  # pas sur Drive
+        "filename": "./checkpoints_img/checkpoint-best.pth"
+    },
     "📦 Swin ImageNet": {
-        "id": "1cz6dnFsI9tpfad7E1Y7uR4LFKiJHgv1U",  # swin_imagenet.pt
+        "id": "1cz6dnFsI9tpfad7E1Y7uR4LFKiJHgv1U",
         "filename": "swin_imagenet.pt"
     },
     "📦 VPH ImageNet": {
-        "id": "1CeI6_dVjD7aN1417SZEy6yL5sQXFtQyM",  # vph_imagenet.pt
+        "id": "1CeI6_dVjD7aN1417SZEy6yL5sQXFtQyM",
         "filename": "vph_imagenet.pt"
     }
 }
 
 def get_model_path(model_key):
     info = MODEL_DRIVE[model_key]
-    local_path = os.path.join(WEIGHTS_DIR, info["filename"])
+    local_path = info["filename"] if info["filename"].startswith("./") else os.path.join(WEIGHTS_DIR, info["filename"])
 
     if not os.path.exists(local_path):
+        if info["id"] is None:
+            raise FileNotFoundError(f"Model file not found locally: {local_path}")
         url = f"https://drive.google.com/uc?export=download&id={info['id']}"
         st.info(f"📥 Downloading {info['filename']} ...")
         gdown.download(url, local_path, quiet=False)
 
     return local_path
+
 
 # ==============================
 # Page Configuration
