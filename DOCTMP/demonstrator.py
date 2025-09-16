@@ -124,16 +124,16 @@ MODEL_DRIVE = {
 
 def get_model_path(model_key):
     info = MODEL_DRIVE[model_key]
-    local_path = info["filename"] if info["filename"].startswith("./") else os.path.join(WEIGHTS_DIR, info["filename"])
+    local_path = os.path.join(WEIGHTS_DIR, info["filename"])
+    st.write(f"🔍 get_model_path -> {local_path}")
 
     if not os.path.exists(local_path):
-        if info["id"] is None:
-            raise FileNotFoundError(f"Model file not found locally: {local_path}")
         url = f"https://drive.google.com/uc?export=download&id={info['id']}"
         st.info(f"📥 Downloading {info['filename']} ...")
         gdown.download(url, local_path, quiet=False)
 
     return local_path
+
 
 
 # ==============================
