@@ -575,8 +575,8 @@ def analyze_image(image_source, image_data=None, image_path=None):
     # Map models -> Google Drive
     MODEL_MAP = {
         "🧩 DTD Original": "🧩 DTD Original",
-        "🔧 DTD Fine-tuned": "📦 Swin ImageNet",   # ← adapte ici si tu as mis le bon poids
-        "🆔 DTD ID Documents": "📦 VPH ImageNet",  # ← adapte aussi
+        "🔧 DTD Fine-tuned": "🔧 DTD Fine-tuned",   # ← adapte ici si tu as mis le bon poids
+        "🆔 DTD ID Documents": "🆔 DTD ID Documents",  # ← adapte aussi
     }
         
     try:
