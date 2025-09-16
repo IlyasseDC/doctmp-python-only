@@ -131,17 +131,23 @@ def list_weights():
     for f in os.listdir(WEIGHTS_DIR):
         st.write("-", f)
 
+WEIGHTS_DIR = "DTD_Weights/Weights"
+os.makedirs(WEIGHTS_DIR, exist_ok=True)
+
 def get_model_path(model_key):
     info = MODEL_DRIVE[model_key]
     local_path = os.path.join(WEIGHTS_DIR, info["filename"])
     st.write(f"🔍 get_model_path -> {local_path}")
 
     if not os.path.exists(local_path):
+        if info["id"] is None:
+            raise FileNotFoundError(f"❌ Pas d’ID Drive pour {info['filename']}")
         url = f"https://drive.google.com/uc?export=download&id={info['id']}"
         st.info(f"📥 Downloading {info['filename']} ...")
         gdown.download(url, local_path, quiet=False)
 
     return local_path
+
 
 
 
