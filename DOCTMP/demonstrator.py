@@ -92,20 +92,12 @@ MODEL_DRIVE = {
         "filename": "dtd_doctamper.pth"
     },
     "🔧 DTD Fine-tuned": {
-        "id": None,  # poids locaux
-        "filename": "./checkpointsfinetune/checkpoint-best.pth"
+        "id": "1IQaaQj0J7qBAohU_CB8xdZ8OZFzXuPOl",  
+        "filename": "checkpoint-best-finetune.pth"
     },
     "🆔 DTD ID Documents": {
-        "id": None,  # poids locaux
-        "filename": "./checkpoints_img/checkpoint-best.pth"
-    },
-    "📦 Swin ImageNet": {
-        "id": "1cz6dnFsI9tpfad7E1Y7uR4LFKiJHgv1U",
-        "filename": "swin_imagenet.pt"
-    },
-    "📦 VPH ImageNet": {
-        "id": "1CeI6_dVjD7aN1417SZEy6yL5sQXFtQyM",
-        "filename": "vph_imagenet.pt"
+        "id": "1B-Fq8EpTfwxxBrmaWoIixqjVg3sh190s",  
+        "filename": "checkpoint-best.pth"
     }
 }
 
@@ -115,23 +107,11 @@ MODEL_DRIVE = {
 def download_all_weights():
     st.write("📥 Vérification des poids dans :", WEIGHTS_DIR)
     for key, info in MODEL_DRIVE.items():
-        # Cas poids locaux
-        if info["id"] is None and info["filename"].startswith("./"):
-            if not os.path.exists(info["filename"]):
-                st.warning(f"⚠️ Poids local manquant : {info['filename']}")
-            continue
-
         local_path = os.path.join(WEIGHTS_DIR, info["filename"])
         if not os.path.exists(local_path):
             url = f"https://drive.google.com/uc?export=download&id={info['id']}"
             st.info(f"📥 Téléchargement de {info['filename']} ...")
             gdown.download(url, local_path, quiet=False)
-            if os.path.exists(local_path):
-                st.success(f"✅ Téléchargé : {local_path}")
-            else:
-                st.error(f"❌ Échec : {local_path}")
-        else:
-            st.write(f"✔️ Déjà présent : {info['filename']}")
 
 # ==============================
 # Retourne le chemin d’un poids

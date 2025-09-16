@@ -46,18 +46,6 @@ os.makedirs(WEIGHTS_DIR, exist_ok=True)
 # Mapping modèles -> Drive
 # ==============================
 MODEL_DRIVE = {
-    "🧩 DTD Original": {
-        "id": "1a1qR_t1ZYbUB_XnWrhftWX-QfBeoGdLF",
-        "filename": "dtd_doctamper.pth"
-    },
-    "🔧 DTD Fine-tuned": {
-        "id": None,  # poids locaux
-        "filename": "./checkpointsfinetune/checkpoint-best.pth"
-    },
-    "🆔 DTD ID Documents": {
-        "id": None,  # poids locaux
-        "filename": "./checkpoints_img/checkpoint-best.pth"
-    },
     "📦 Swin ImageNet": {
         "id": "1cz6dnFsI9tpfad7E1Y7uR4LFKiJHgv1U",
         "filename": "swin_imagenet.pt"
