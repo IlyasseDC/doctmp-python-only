@@ -77,7 +77,12 @@ from torch.cuda.amp import autocast
 from models.dtd import seg_dtd
 import gdown
 import glob
+file_id = "1CeI6_dVjD7aN1417SZEy6yL5sQXFtQyM"
+url = f"https://drive.google.com/uc?export=download&id={file_id}"
+output = "vph_imagenet.pt"
 
+gdown.download(url, output, quiet=False)
+print("✅ Téléchargement terminé:", output)
 WEIGHTS_DIR = "DTD_Weights/Weights"
 os.makedirs(WEIGHTS_DIR, exist_ok=True)
 def debug_drive_and_weights():
