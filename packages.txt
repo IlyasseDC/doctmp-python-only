@@ -1,3 +1,5 @@
+setuptools<82
+wheel
 freeglut3-dev
 libgtk2.0-dev
 libgl1
